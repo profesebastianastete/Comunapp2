@@ -1,126 +1,103 @@
+import { Lock } from "lucide-react";
 import { useEffect, useState } from "react";
-import AdminPlatform from "./components/AdminPlatform";
-import DashCondo from "./components/DashCondo";
-import DashResidente from "./components/DashResidente";
-import Home, { ApiDocs } from "./components/Home";
-import Login from "./components/Login";
-import { Btn, Icon, Logo, RolTag, Toaster, toast } from "./components/ui";
-import { cambiarParcelaSesion, getSesion, ROL_LABEL, setSesion, usuarioActual, type Sesion } from "./lib/store";
+import AdminApp from "./components/AdminApp";
+import Dashboard from "./components/Dashboard";
+import Entrar from "./components/Entrar";
+import Landing from "./components/Landing";
+import { Btn, Logo, Toaster, toast } from "./components/ui";
+import { getSesion, ROL_LABEL, setSesion, type Sesion } from "./lib/store";
 
-type Vista = "home" | "login" | "api" | "app";
+/* ── mini router por hash ───────────────────────────────────── */
+function useRuta() {
+  const [ruta, setRuta] = useState(() => (window.location.hash.replace(/^#/, "") || "/"));
+  useEffect(() => {
+    const on = () => setRuta(window.location.hash.replace(/^#/, "") || "/");
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return ruta;
+}
+const irA = (ruta: string) => {
+  window.location.hash = ruta;
+  window.scrollTo({ top: 0, behavior: "auto" });
+};
 
 export default function App() {
-  const [vista, setVista] = useState<Vista>("home");
+  const ruta = useRuta();
   const [sesion, setSesionState] = useState<Sesion | null>(() => getSesion());
 
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "auto" });
-  }, [vista]);
-
-  const usuario = sesion ? usuarioActual(sesion) : null;
-
-  // si el usuario fue eliminado mientras tanto, cerrar sesión con aviso
-  useEffect(() => {
-    if (sesion && !usuario) {
-      setSesion(null);
-      setSesionState(null);
-      toast("Tu cuenta ya no existe. La sesión fue cerrada.", "warn");
-    }
-  }, [sesion, usuario]);
-
-  const entrar = (s: Sesion) => {
+  const alEntrar = (s: Sesion) => {
     setSesionState(s);
-    setVista("app");
-    const u = usuarioActual(s);
-    toast("Bienvenido, " + (u?.nombre.split(" ")[0] ?? "vecino") + " — sesión como " + ROL_LABEL[s.rol] + ".");
+    irA(s.rol === "SUPERADMIN" ? "/adminapp" : "/dashboard");
+    toast("Sesión iniciada como " + ROL_LABEL[s.rol] + ".");
   };
-
   const salir = () => {
     setSesion(null);
     setSesionState(null);
-    setVista("home");
+    irA("/");
     toast("Sesión cerrada. ¡Hasta pronto!", "warn");
   };
 
-  const irA = (v: Vista) => setVista(v);
+  /* guard de rutas */
+  useEffect(() => {
+    if (ruta === "/dashboard" && !sesion) irA("/entrar");
+    if (ruta === "/adminapp" && sesion?.rol !== "SUPERADMIN") {
+      // se mantiene la vista para mostrar el aviso de acceso restringido
+    }
+  }, [ruta, sesion]);
+
+  let vista: React.ReactNode;
+  if (ruta === "/entrar") {
+    vista = sesion
+      ? <Redirigir a={sesion.rol === "SUPERADMIN" ? "/adminapp" : "/dashboard"} />
+      : <Entrar onLogin={alEntrar} volver={() => irA("/")} />;
+  } else if (ruta === "/dashboard") {
+    vista = sesion
+      ? sesion.rol === "SUPERADMIN"
+        ? <Redirigir a="/adminapp" />
+        : <Dashboard sesion={sesion} salir={salir} />
+      : <Redirigir a="/entrar" />;
+  } else if (ruta === "/adminapp") {
+    vista = sesion?.rol === "SUPERADMIN"
+      ? <AdminApp sesion={sesion} salir={salir} />
+      : <AccesoRestringido entrar={() => irA("/entrar")} volver={() => irA("/")} />;
+  } else {
+    vista = <Landing entrar={() => irA(sesion ? (sesion.rol === "SUPERADMIN" ? "/adminapp" : "/dashboard") : "/entrar")} />;
+  }
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      {vista === "home" && <Home nav={irA} sesion={!!sesion} panel={() => setVista("app")} />}
-      {vista === "login" && <Login onLogin={entrar} back={() => irA("home")} />}
-      {vista === "api" && <ApiDocs back={() => irA("home")} />}
-
-      {vista === "app" && sesion && usuario && (
-        <div className="min-h-screen">
-          {/* barra de la aplicación */}
-          <header className="sticky top-0 z-50 border-b-[1.5px] border-ink bg-paper/95 backdrop-blur-sm">
-            <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-5 md:px-8">
-              <button onClick={() => irA("home")} aria-label="Ir al sitio">
-                <Logo />
-              </button>
-
-              <span className="hidden h-6 w-px bg-ink/20 sm:block" />
-
-              {/* contexto del tenant */}
-              <div className="hidden min-w-0 items-center gap-2 md:flex">
-                <Icon name={sesion.rol === "SUPERADMIN" ? "sparkle" : "building"} size={15} className="shrink-0 text-pine" />
-                <span className="truncate font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-ink2">
-                  {sesion.rol === "SUPERADMIN" ? "Consola global · todos los tenants" : "Tenant " + sesion.parcelaId?.slice(0, 8)}
-                </span>
-                {/* cambio de condominio si pertenece a varios */}
-                {usuario.membresias.length > 1 && (
-                  <select
-                    className="field h-9! w-auto! border-ink/40! text-[12px]!"
-                    value={sesion.parcelaId ?? ""}
-                    onChange={(e) => {
-                      const nueva = cambiarParcelaSesion(sesion, e.target.value);
-                      if (nueva) {
-                        setSesionState(nueva);
-                        toast("Cambiaste a tu rol " + ROL_LABEL[nueva.rol] + " en otro condominio.");
-                      }
-                    }}
-                  >
-                    {usuario.membresias.map((m) => (
-                      <option key={m.parcelaId} value={m.parcelaId}>
-                        {m.parcelaId === "p_torres" ? "Torres del Parque" : m.parcelaId === "p_alamos" ? "Los Álamos" : m.parcelaId.slice(0, 8)} · {ROL_LABEL[m.rol]}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              <div className="ml-auto flex items-center gap-3">
-                <div className="hidden text-right sm:block">
-                  <p className="text-[12.5px] font-semibold leading-tight text-ink">{usuario.nombre}</p>
-                  <p className="font-mono text-[10px] uppercase tracking-wide leading-tight text-ink3">{usuario.email}</p>
-                </div>
-                <RolTag rol={sesion.rol} label={ROL_LABEL[sesion.rol]} />
-                <Btn variant="ghost" size="sm" onClick={salir}>
-                  <Icon name="logout" size={14} /> <span className="hidden sm:inline">Salir</span>
-                </Btn>
-              </div>
-            </div>
-          </header>
-
-          {/* consola según rol */}
-          <main className="pb-16">
-            {sesion.rol === "SUPERADMIN" && <AdminPlatform sesion={sesion} />}
-            {(sesion.rol === "ADMIN" || sesion.rol === "COMITE") && <DashCondo sesion={sesion} usuario={usuario} />}
-            {(sesion.rol === "PROPIETARIO" || sesion.rol === "ARRENDATARIO") && <DashResidente sesion={sesion} usuario={usuario} />}
-          </main>
-
-          <footer className="border-t-[1.5px] border-ink bg-paper2 py-6">
-            <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink3 md:px-8">
-              <span>ComunApp · demo funcional — los datos simulan la API FastAPI en tu navegador</span>
-              <button onClick={() => irA("api")} className="flex items-center gap-1.5 text-pine transition-colors hover:text-ink">
-                <Icon name="python" size={13} /> ver la API en Python
-              </button>
-            </div>
-          </footer>
-        </div>
-      )}
-
+      {vista}
       <Toaster />
+    </div>
+  );
+}
+
+function Redirigir({ a }: { a: string }) {
+  useEffect(() => { irA(a); }, [a]);
+  return null;
+}
+
+/* pantalla para la ruta oculta sin permisos */
+function AccesoRestringido({ entrar, volver }: { entrar: () => void; volver: () => void }) {
+  return (
+    <div className="dotgrid-dark flex min-h-screen flex-col items-center justify-center bg-deep px-5 text-center text-white">
+      <span className="grid h-16 w-16 place-items-center rounded-2xl border border-neon/40 bg-neon/10 text-neon"><Lock size={30} /></span>
+      <p className="mt-6 font-mono text-[11px] font-bold uppercase tracking-[0.26em] text-neon">/adminapp · acceso restringido</p>
+      <h1 className="mt-3 font-display text-[clamp(2rem,5vw,3.4rem)] font-bold leading-tight tracking-tight">
+        Esta sala es solo para el<br />equipo de ComunApp.
+      </h1>
+      <p className="mt-4 max-w-md text-[14.5px] leading-relaxed text-white/60">
+        El panel de administración de la plataforma requiere una cuenta de superadmin. Si tienes una, entra desde aquí.
+      </p>
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <Btn variant="neon" size="lg" onClick={entrar}>Ingresar con mi cuenta</Btn>
+        <Btn variant="ghost" size="lg" onClick={volver} className="border-white/25! text-white/80! hover:border-white! hover:bg-white/10!">Volver al sitio</Btn>
+      </div>
+      <p className="mt-10 font-mono text-[10px] uppercase tracking-[0.18em] text-white/30">
+        pista para la demo: equipo@comunapp.cl · admin123
+      </p>
+      <div className="mt-12"><Logo dark /></div>
     </div>
   );
 }
