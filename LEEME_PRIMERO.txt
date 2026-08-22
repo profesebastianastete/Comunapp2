@@ -1,0 +1,79 @@
+================================================================
+   C O M U N A P P   -   GUIA RAPIDA DE INICIO
+   Administracion de condominios y edificios  (backend Python)
+================================================================
+
+REQUISITO PREVIO
+   Instala Python 3.10 o superior desde https://www.python.org
+   IMPORTANTE: al instalarlo, marca la casilla "Add Python to PATH".
+
+
+----------------------------------------------------------------
+OPCION A  -  La mas facil (recomendada)
+----------------------------------------------------------------
+   1. Haz DOBLE CLICK en el archivo:   comunapp.bat
+   2. Aparecera un menu. Escribe el numero y presiona Enter:
+
+        [1]  Instalar backend completo   <-- haz esto la primera vez
+        [3]  Sembrar datos demo          <-- crea usuarios de prueba
+        [2]  Iniciar API                 <-- levanta el servidor
+
+   3. Cuando la API este en linea, abre en tu navegador:
+
+        Documentacion interactiva:  http://127.0.0.1:8000/docs
+        Estado de la API:           http://127.0.0.1:8000
+
+   4. Para detener el servidor presiona  Ctrl + C  en la ventana.
+
+
+----------------------------------------------------------------
+OPCION B  -  Manual, solo con comandos de Python
+----------------------------------------------------------------
+   Abre una terminal (CMD o PowerShell) en la carpeta del proyecto
+   y ejecuta, en orden:
+
+        comunapp.bat            (elige la opcion 1 para instalar)
+
+   O, si prefieres hacerlo todo a mano sin el .bat:
+
+        python -m venv backend\.venv
+        backend\.venv\Scripts\activate
+        pip install -r backend\requirements.txt
+        cd backend
+        python seed.py                       (siembra datos demo)
+        python -m uvicorn main:app --port 8000
+
+
+----------------------------------------------------------------
+CREDENCIALES DE DEMOSTRACION (despues de sembrar los datos)
+----------------------------------------------------------------
+   plataforma@comunapp.cl        admin123     SUPERADMIN  (plataforma)
+   admin@torresdelparque.cl      admin123     ADMIN       (condominio)
+   comite@torresdelparque.cl     comite123    COMITE
+   maria@demo.cl                 demo123      PROPIETARIO
+   jorge@demo.cl                 demo123      ARRENDATARIO
+
+
+----------------------------------------------------------------
+BASE DE DATOS
+----------------------------------------------------------------
+   Por defecto usa SQLite (archivo backend\comunapp.db): no hay que
+   instalar nada. Se crea automaticamente al iniciar la API.
+
+   Para usar PostgreSQL, edita backend\.env y cambia DATABASE_URL:
+
+        DATABASE_URL=postgresql://usuario:clave@localhost:5432/comunapp
+
+
+----------------------------------------------------------------
+SI ALGO FALLA
+----------------------------------------------------------------
+   - "python no se reconoce": reinstala Python marcando
+     "Add Python to PATH" y abre una terminal nueva.
+   - Error al instalar dependencias: verifica tu conexion a internet
+     y vuelve a ejecutar la opcion [1] del .bat.
+   - El puerto 8000 esta ocupado: inicia con otro puerto, por ejemplo
+     python -m uvicorn main:app --port 8080
+   - Para ver que esta instalado: opcion [5] del menu.
+
+================================================================
