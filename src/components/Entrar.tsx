@@ -1,7 +1,8 @@
-import { ArrowRight, Building2, Eye, EyeOff, Lock } from "lucide-react";
+import { ArrowRight, Building2, Eye, EyeOff, Lock, RotateCcw } from "lucide-react";
 import { useState } from "react";
-import { login, type Sesion } from "../lib/store";
-import { Btn, Field, Logo, Spinner } from "./ui";
+import { apiMode } from "../lib/api";
+import { login, resetDemo, type Sesion } from "../lib/store";
+import { Btn, Field, Logo, Spinner, toast } from "./ui";
 
 export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => void; volver: () => void }) {
   const [email, setEmail] = useState("");
@@ -65,7 +66,22 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
               </div>
             </Field>
             {error && (
-              <p className="rounded-xl border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>
+              <div className="space-y-2">
+                <p className="rounded-xl border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>
+                {!apiMode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetDemo();
+                      setError(null);
+                      toast("Datos de demostración restablecidos. Vuelve a intentar.", "ok");
+                    }}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-pine/40 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-pine transition-colors hover:border-pine hover:bg-pine/5"
+                  >
+                    <RotateCcw size={13} /> Restablecer datos de demostración
+                  </button>
+                )}
+              </div>
             )}
             <Btn type="submit" variant="primary" size="lg" className="w-full" disabled={cargando}>
               {cargando ? <><Spinner /> Entrando…</> : <>Entrar <ArrowRight size={16} /></>}
