@@ -1,5 +1,21 @@
+# Dependencias
 node_modules/
-.next/
+
+# Build de producción (se regenera con: npm run build)
 dist/
-build/
+
+# Backend Python generado por comunapp.bat / comunapp.sh
+backend/
+__pycache__/
+*.pyc
+.venv/
+*.db
+
+# Entorno y sistema
+.env
+*.local
+.DS_Store
+Thumbs.db
 *.log
+.next/
+build/
