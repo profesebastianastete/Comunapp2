@@ -323,6 +323,20 @@ export function setSesion(s: Sesion | null) {
   else localStorage.removeItem(SK);
 }
 
+/* ── cambio de contraseña (cualquier rol) ───────────────────── */
+export async function cambiarPassword(actual: string, nueva: string) {
+  if (EN_API) return api.cambiarPassword(actual, nueva);
+  await delay(700);
+  const s = getSesion();
+  if (!s) throw new Error("No hay una sesión activa.");
+  const u = db().usuarios.find((x) => x.id === s.usuarioId);
+  if (!u) throw new Error("Tu cuenta ya no existe.");
+  if (u.password !== actual) throw new Error("La contraseña actual no es correcta.");
+  u.password = nueva;
+  evento("Contraseña actualizada · " + u.email);
+  guardar();
+}
+
 export async function login(email: string, password: string): Promise<Sesion> {
   if (EN_API) {
     const s = await api.login(email, password);
@@ -768,6 +782,41 @@ export async function toggleEstadoComunidad(comunidadId: string) {
   evento("Estado de " + c.nombre + " → " + c.estado);
   guardar();
   return c.estado;
+}
+
+/* ── facturación SaaS: cobros A las comunidades ─────────────── */
+export const PRECIO_PLAN: Record<PlanId, number> = { COMITE: 0, PARCELAS: 29900, CUSTOM: 89000 };
+
+/** Genera la factura mensual del plan para cada comunidad activa del periodo. */
+export async function generarFacturasMes(periodo: string): Promise<{ creadas: number; total: number }> {
+  if (EN_API) return api.generarFacturasMes(periodo);
+  await delay(800);
+  const d = db();
+  const activas = d.comunidades.filter((c) => c.estado === "ACTIVA");
+  let creadas = 0;
+  for (const c of activas) {
+    if (d.facturas.some((f) => f.comunidadId === c.id && f.periodo === periodo)) continue;
+    d.facturas.push({
+      id: "f_" + uid().slice(0, 8), comunidadId: c.id, periodo,
+      plan: PLAN_LABEL[c.plan], monto: PRECIO_PLAN[c.plan], estado: "PENDIENTE", fecha: ahoraISO(),
+    });
+    creadas++;
+  }
+  if (creadas > 0) evento("Facturación " + periodo + " generada: " + creadas + " comunidades");
+  guardar();
+  return { creadas, total: activas.length };
+}
+
+/** Marca una factura del SaaS como pagada (cobrada a la comunidad). */
+export async function marcarFacturaPagada(facturaId: string) {
+  if (EN_API) return api.marcarFacturaPagada(facturaId);
+  await delay(500);
+  const d = db();
+  const f = d.facturas.find((x) => x.id === facturaId);
+  if (!f) throw new Error("Factura no encontrada.");
+  f.estado = "PAGADA";
+  evento("Factura " + f.id.slice(2, 8).toUpperCase() + " cobrada · " + fmtCLP(f.monto));
+  guardar();
 }
 
 export async function crearUsuarioGlobal(data: { nombre: string; email: string; password: string; rolGlobal: boolean; membresias: Membresia[] }) {

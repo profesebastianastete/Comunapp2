@@ -1,12 +1,13 @@
 import {
-  Activity, Building2, Copy, CreditCard, ExternalLink, PlugZap, PlusCircle, Power, TrendingUp, Users,
+  Activity, Building2, CheckCheck, Copy, CreditCard, ExternalLink, KeyRound, PlugZap, PlusCircle, Power, TrendingUp, Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  crearComunidadSaaS, fmtCLP, fmtFecha, fmtMes, generarCobroMP, listadoSaaS, PLAN_LABEL, toggleEstadoComunidad,
+  crearComunidadSaaS, fmtCLP, fmtFecha, fmtMes, generarCobroMP, generarFacturasMes, listadoSaaS,
+  marcarFacturaPagada, PLAN_LABEL, toggleEstadoComunidad, usuarioActual,
   type CobroMP, type PlanId, type Sesion,
 } from "../lib/store";
-import { Btn, CountUp, Empty, EstadoTag, Field, Modal, Spinner, toast } from "./ui";
+import { Btn, CountUp, Empty, EstadoTag, Field, Modal, ModalCambiarPassword, Spinner, toast } from "./ui";
 
 type Tab = "metricas" | "comunidades" | "cobrosmp" | "facturacion" | "actividad";
 
@@ -32,6 +33,8 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
   const [tab, setTab] = useState<Tab>("metricas");
   const [data, setData] = useState<SaaSData | null>(null);
   const [modalNueva, setModalNueva] = useState(false);
+  const [modalPass, setModalPass] = useState(false);
+  const yo = usuarioActual(sesion);
 
   const refetch = useCallback(async () => {
     setData(await listadoSaaS() as unknown as SaaSData);
@@ -64,10 +67,19 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
           <span className="hidden rounded-full border border-neon/40 px-2.5 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-neon sm:inline">superadmin · acceso restringido</span>
           <div className="ml-auto flex items-center gap-3">
             <span className="hidden font-mono text-[11px] uppercase tracking-wide text-white/50 md:inline">ruta /adminapp · sin enlaces públicos</span>
+            <button
+              onClick={() => setModalPass(true)}
+              title="Cambiar contraseña"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-white/20 text-white/70 transition-colors hover:border-neon hover:text-neon"
+            >
+              <KeyRound size={15} />
+            </button>
             <button onClick={salir} className="rounded-lg border border-white/20 px-3.5 py-2 font-mono text-[11px] font-bold uppercase tracking-wide text-white/80 transition-colors hover:border-signal hover:text-signal">Salir</button>
           </div>
         </div>
       </header>
+
+      <ModalCambiarPassword open={modalPass} onClose={() => setModalPass(false)} usuario={yo?.nombre ?? "Superadmin"} />
 
       <div className="mx-auto grid max-w-[1400px] gap-7 px-5 py-8 md:px-8 lg:grid-cols-[220px_1fr]">
         <aside className="lg:sticky lg:top-20 lg:self-start">
@@ -103,7 +115,7 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
           ) : tab === "cobrosmp" ? (
             <CobrosMP data={data} refetch={refetch} />
           ) : tab === "facturacion" ? (
-            <Facturacion data={data} kpis={kpis} />
+            <Facturacion data={data} kpis={kpis} refetch={refetch} />
           ) : (
             <Actividad data={data} />
           )}
@@ -459,7 +471,7 @@ function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Prom
 }
 
 /* ── facturación ── */
-function Facturacion({ data, kpis }: { data: SaaSData; kpis: { mrr: number } }) {
+function Facturacion({ data, kpis, refetch }: { data: SaaSData; kpis: { mrr: number }; refetch: () => Promise<void> }) {
   const porMes = useMemo(() => {
     const m = new Map<string, number>();
     data.facturas.forEach((f) => m.set(f.periodo, (m.get(f.periodo) ?? 0) + f.monto));
@@ -467,8 +479,59 @@ function Facturacion({ data, kpis }: { data: SaaSData; kpis: { mrr: number } }) 
   }, [data.facturas]);
   const maxMes = Math.max(...porMes.map(([, v]) => v), 1);
 
+  // últimos 6 periodos (el actual primero)
+  const periodos = useMemo(() => {
+    const out: string[] = [];
+    const d = new Date();
+    for (let i = 0; i < 6; i++) { out.push(d.toISOString().slice(0, 7)); d.setMonth(d.getMonth() - 1); }
+    return out;
+  }, []);
+  const [mes, setMes] = useState(periodos[0]);
+  const [generando, setGenerando] = useState(false);
+  const [cobrando, setCobrando] = useState<string | null>(null);
+
+  const generar = async () => {
+    setGenerando(true);
+    const r = await generarFacturasMes(mes);
+    await refetch();
+    setGenerando(false);
+    toast(
+      r.creadas > 0
+        ? "Facturación de " + fmtMes(mes) + " generada: " + r.creadas + " de " + r.total + " comunidades."
+        : "Ese periodo ya está facturado para todas las comunidades activas.",
+      r.creadas > 0 ? "ok" : "warn",
+    );
+  };
+
+  const cobrar = async (facturaId: string, nombre: string) => {
+    setCobrando(facturaId);
+    await marcarFacturaPagada(facturaId);
+    await refetch();
+    setCobrando(null);
+    toast("Factura cobrada a " + nombre + ".");
+  };
+
   return (
     <div className="fade-swap space-y-6">
+      {/* generar facturación del mes (cobro a las comunidades) */}
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-neon/30 bg-neon/[0.06] px-6 py-5">
+        <span className="grid h-11 w-11 place-items-center rounded-xl bg-neon text-deep"><CreditCard size={20} /></span>
+        <div className="min-w-[220px] flex-1">
+          <p className="font-display text-lg font-bold text-white">Generar cobro a las comunidades</p>
+          <p className="text-[12.5px] text-white/55">Crea la factura mensual del plan para cada comunidad activa. No duplica periodos ya facturados.</p>
+        </div>
+        <div className="flex items-end gap-3">
+          <Field label="Periodo">
+            <select className="field w-44" value={mes} onChange={(e) => setMes(e.target.value)}>
+              {periodos.map((p) => <option key={p} value={p}>{fmtMes(p)}</option>)}
+            </select>
+          </Field>
+          <Btn variant="neon" onClick={() => void generar()} disabled={generando}>
+            {generando ? <Spinner /> : <><PlusCircle size={15} /> Generar facturación</>}
+          </Btn>
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-neon/50 bg-neon/10 p-5">
           <p className="font-mono text-[9.5px] font-bold uppercase tracking-[0.2em] text-neon">MRR actual</p>
@@ -503,11 +566,13 @@ function Facturacion({ data, kpis }: { data: SaaSData; kpis: { mrr: number } }) 
             <tr className="border-b border-white/10 font-mono text-[9.5px] uppercase tracking-[0.18em] text-white/40">
               <th className="px-5 py-3.5">Factura</th><th className="px-5 py-3.5">Tenant</th><th className="px-5 py-3.5">Plan</th>
               <th className="px-5 py-3.5">Periodo</th><th className="px-5 py-3.5">Monto</th><th className="px-5 py-3.5">Estado</th>
+              <th className="px-5 py-3.5 text-right">Acción</th>
             </tr>
           </thead>
           <tbody>
             {[...data.facturas].sort((a, b) => b.periodo.localeCompare(a.periodo)).map((f) => {
               const tenant = data.comunidades.find((c) => c.id === f.comunidadId);
+              const pendiente = f.estado !== "PAGADA";
               return (
                 <tr key={f.id} className="border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.04]">
                   <td className="px-5 py-3.5 font-mono text-[11.5px] text-white/60">F-{f.id.slice(3).toUpperCase()}</td>
@@ -516,6 +581,19 @@ function Facturacion({ data, kpis }: { data: SaaSData; kpis: { mrr: number } }) 
                   <td className="px-5 py-3.5 font-mono text-[12px] text-white/60">{fmtMes(f.periodo)}</td>
                   <td className="tnum px-5 py-3.5 font-mono text-[13px] font-bold text-white">{f.monto === 0 ? "Gratis" : fmtCLP(f.monto)}</td>
                   <td className="px-5 py-3.5"><EstadoTag estado={f.estado === "PAGADA" ? "PAGADO" : f.estado === "PENDIENTE" ? "PENDIENTE" : "VENCIDO"} /></td>
+                  <td className="px-5 py-3.5 text-right">
+                    {pendiente ? (
+                      <button
+                        disabled={cobrando === f.id}
+                        onClick={() => void cobrar(f.id, tenant?.nombre ?? "la comunidad")}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-neon/50 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-neon transition-colors hover:bg-neon hover:text-deep disabled:opacity-50"
+                      >
+                        {cobrando === f.id ? <Spinner className="h-3 w-3" /> : <CheckCheck size={12} />} Cobrar
+                      </button>
+                    ) : (
+                      <span className="font-mono text-[10px] uppercase text-white/30">—</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}

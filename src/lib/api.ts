@@ -126,8 +126,16 @@ export const marcarSalida = (cid: string, registroId: string) =>
 export const crearVecino = (cid: string, data: { nombre: string; email: string; password: string; rol: string; unidad?: string }) =>
   post<{ ok: boolean }>(`/api/comunidades/${cid}/vecinos`, data);
 
+/* ─────────────── cuenta ─────────────── */
+export const cambiarPassword = (actual: string, nueva: string) =>
+  post<{ ok: boolean }>("/api/auth/cambiar-password", { actual, nueva });
+
 /* ─────────────── SaaS / superadmin ─────────────── */
 export const listadoSaaS = () => get<unknown>("/api/saas/listado");
+export const generarFacturasMes = (periodo: string) =>
+  post<{ creadas: number; total: number }>("/api/saas/facturas/generar", { periodo });
+export const marcarFacturaPagada = (facturaId: string) =>
+  post<{ ok: boolean }>(`/api/saas/facturas/${facturaId}/pagar`);
 export const crearComunidadSaaS = (data: { nombre: string; direccion: string; ciudad: string; unidades: number; plan: string; emailAdmin: string; nombreAdmin: string }) =>
   post("/api/saas/comunidades", {
     nombre: data.nombre, direccion: data.direccion, ciudad: data.ciudad,

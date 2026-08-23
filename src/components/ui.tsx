@@ -1,6 +1,7 @@
-import { Check, Copy, Inbox } from "lucide-react";
+import { Check, Copy, Inbox, KeyRound } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ROL_COLOR, type Rol } from "../lib/store";
+import { createPortal } from "react-dom";
+import { cambiarPassword, ROL_COLOR, type Rol } from "../lib/store";
 
 /* ── logo ───────────────────────────────────────────────────── */
 export function Logo({ dark = false, small = false }: { dark?: boolean; small?: boolean }) {
@@ -131,10 +132,12 @@ export function Modal({
     };
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  // Portal a <body>: garantiza que el modal quede centrado en la VENTANA,
+  // aunque el contenido detrás tenga animaciones/transforms o la página esté desplazada.
+  return createPortal(
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" role="dialog" aria-modal>
       <div className="absolute inset-0 bg-deep/60 backdrop-blur-[3px]" onClick={onClose} />
-      <div className={"pop-in relative max-h-[88vh] w-full overflow-y-auto rounded-2xl border border-line bg-card shadow-lift " + (wide ? "max-w-3xl" : "max-w-lg")}>
+      <div className={"pop-in relative max-h-[min(88vh,760px)] w-full overflow-y-auto rounded-2xl border border-line bg-card shadow-lift " + (wide ? "max-w-3xl" : "max-w-lg")}>
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-card/95 px-6 py-4 backdrop-blur">
           <h3 className="font-display text-xl font-bold text-ink">{title}</h3>
           <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-lg border border-line text-ink2 transition-colors hover:border-signal hover:text-signal" aria-label="Cerrar">
@@ -143,7 +146,8 @@ export function Modal({
         </div>
         <div className="px-6 py-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -162,7 +166,7 @@ export function Toaster() {
     };
     return () => { pushToast = null; };
   }, []);
-  return (
+  return createPortal(
     <div className="pointer-events-none fixed bottom-5 right-5 z-[120] flex w-[min(380px,90vw)] flex-col gap-2">
       {items.map((t) => (
         <div key={t.id} className={"pop-in pointer-events-auto flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lift " + (t.tipo === "ok" ? "border-pine2/30 bg-pine text-white" : "border-signal/40 bg-card text-ink")}>
@@ -172,7 +176,65 @@ export function Toaster() {
           <p className="text-[13px] font-medium leading-snug">{t.msg}</p>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body,
+  );
+}
+
+/* ── cambiar contraseña (todos los roles) ───────────────────── */
+export function ModalCambiarPassword({ open, onClose, usuario }: { open: boolean; onClose: () => void; usuario: string }) {
+  const [actual, setActual] = useState("");
+  const [nueva, setNueva] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const limpiar = () => { setActual(""); setNueva(""); setConfirmar(""); setError(null); };
+  const cerrar = () => { limpiar(); onClose(); };
+
+  const guardar = async () => {
+    if (!actual) return setError("Escribe tu contraseña actual.");
+    if (nueva.length < 6) return setError("La nueva contraseña debe tener al menos 6 caracteres.");
+    if (nueva !== confirmar) return setError("La confirmación no coincide con la nueva contraseña.");
+    setError(null);
+    setBusy(true);
+    try {
+      await cambiarPassword(actual, nueva);
+      toast("Contraseña actualizada. La próxima vez entra con la nueva.");
+      cerrar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cambiar la contraseña.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Modal open={open} onClose={cerrar} title="Cambiar contraseña">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-pine text-neon"><KeyRound size={16} /></span>
+          <p className="text-[12.5px] leading-snug text-ink2">Sesión de <strong className="text-ink">{usuario}</strong>. Por seguridad, confirma tu contraseña actual.</p>
+        </div>
+        <Field label="Contraseña actual">
+          <input className="field" type="password" value={actual} onChange={(e) => setActual(e.target.value)} placeholder="••••••••" autoComplete="current-password" />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Nueva contraseña" hint="mín. 6 caracteres">
+            <input className="field" type="password" value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
+          </Field>
+          <Field label="Confirmar nueva">
+            <input className="field" type="password" value={confirmar} onChange={(e) => setConfirmar(e.target.value)} placeholder="••••••••" autoComplete="new-password" />
+          </Field>
+        </div>
+        {error && <p className="rounded-xl border-[1.5px] border-signal bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-[#a03526]">{error}</p>}
+        <div className="flex justify-end gap-2.5 border-t border-line pt-4">
+          <Btn variant="ghost" onClick={cerrar}>Cancelar</Btn>
+          <Btn variant="primary" onClick={() => void guardar()} disabled={busy}>
+            {busy ? <Spinner /> : <><Check size={15} /> Guardar contraseña</>}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

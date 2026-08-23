@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, BellRing, CalendarDays, CheckCircle2, Download, Megaphone, PieChart,
+  AlertTriangle, BellRing, CalendarDays, CheckCircle2, Download, KeyRound, Megaphone, PieChart,
   Receipt, ShieldCheck, Vote, Wallet, Wrench,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -8,7 +8,7 @@ import {
   fmtFechaHora, fmtMes, pagarCobro, ROL_LABEL, usuarioActual, votar,
   type Aviso, type Cobro, type DatosComunidad, type Pago, type Reserva, type Sesion, type Votacion,
 } from "../lib/store";
-import { Btn, Empty, EstadoTag, Field, Logo, Modal, RolTag, Spinner, toast } from "./ui";
+import { Btn, Empty, EstadoTag, Field, Logo, Modal, ModalCambiarPassword, RolTag, Spinner, toast } from "./ui";
 import { FormMovimiento, ModuloBitacora, ModuloCobranza, ModuloPagosMes, ModuloVecinos } from "./DashAdmin";
 
 type Modulo =
@@ -22,6 +22,7 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
   const usuario = usuarioActual(sesion);
   const [datos, setDatos] = useState<DatosComunidad | null>(null);
   const [modulo, setModulo] = useState<Modulo | null>(null);
+  const [modalPass, setModalPass] = useState(false);
 
   const esResidente = sesion.rol === "PROPIETARIO" || sesion.rol === "ARRENDATARIO";
   const esAdmin = sesion.rol === "ADMIN";
@@ -81,10 +82,19 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
               <p className="font-mono text-[9.5px] uppercase tracking-wide text-ink3">{sesion.unidad ?? ROL_LABEL[sesion.rol]}</p>
             </div>
             <RolTag rol={sesion.rol} label={ROL_LABEL[sesion.rol]} />
+            <button
+              onClick={() => setModalPass(true)}
+              title="Cambiar contraseña"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-card text-ink2 transition-all hover:-translate-y-0.5 hover:border-pine hover:text-pine hover:shadow-soft"
+            >
+              <KeyRound size={15} />
+            </button>
             <Btn variant="ghost" size="sm" onClick={salir}>Salir</Btn>
           </div>
         </div>
       </header>
+
+      <ModalCambiarPassword open={modalPass} onClose={() => setModalPass(false)} usuario={usuario.nombre} />
 
       <div className="mx-auto grid max-w-[1400px] gap-7 px-5 py-8 md:px-8 lg:grid-cols-[230px_1fr]">
         {/* sidebar */}
