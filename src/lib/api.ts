@@ -93,7 +93,7 @@ export const desvincularMP = (cid: string) =>
 
 /** Genera un cobro real vía API de Mercado Pago (Checkout Pro) y devuelve el punto de pago. */
 export const generarCobroMP = (cid: string, data: { monto: number; concepto: string; unidad?: string; emailPagador?: string }) =>
-  post<{ id: string; puntoDePago: string; monto: number; concepto: string; unidad?: string; creado: string }>(
+  post<{ id: string; puntoDePago: string; monto: number; concepto: string; unidad?: string; creado: string; modo?: "sandbox" | "produccion" }>(
     `/api/comunidades/${cid}/mp/cobros`,
     { monto: data.monto, concepto: data.concepto, unidad: data.unidad, email_pagador: data.emailPagador },
   );

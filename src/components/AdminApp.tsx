@@ -15,7 +15,12 @@ interface SaaSData {
     id: string; nombre: string; direccion: string; ciudad: string; unidades: number;
     plan: PlanId; creada: string; estado: "ACTIVA" | "SUSPENDIDA";
     usuarios: number; cobrosMes: number; recaudado: number;
-    vinculacion: { conectada: boolean };
+    vinculacion: {
+      conectada: boolean;
+      email?: string;
+      modo?: "sandbox" | "produccion";
+      accessToken?: string;
+    };
   }[];
   usuarios: { id: string; nombre: string; email: string; activo: boolean }[];
   facturas: { id: string; comunidadId: string; periodo: string; plan: string; monto: number; estado: string; fecha: string }[];
@@ -185,6 +190,198 @@ function Metricas({ data, kpis }: { data: SaaSData; kpis: { mrr: number; volumen
         </div>
       </div>
     </div>
+  );
+}
+
+/* ── cobros vía Mercado Pago (superadmin) ── */
+function CobrosMP({ data, refetch }: { data: SaaSData; refetch: () => Promise<void> }) {
+  const conectadas = data.comunidades.filter((c) => c.vinculacion.conectada);
+  const [comunidadId, setComunidadId] = useState(conectadas[0]?.id ?? "");
+  const [form, setForm] = useState({ monto: 55000, concepto: "Pagos del mes", unidad: "", emailPagador: "" });
+  const [busy, setBusy] = useState(false);
+  const [ultimo, setUltimo] = useState<CobroMP | null>(null);
+  const [historial, setHistorial] = useState<(CobroMP & { comunidad: string; modo?: string })[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const comuSel = conectadas.find((c) => c.id === comunidadId);
+
+  const generar = async () => {
+    if (!comunidadId) return;
+    if (form.monto <= 0) { setError("El monto debe ser mayor a 0."); return; }
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await generarCobroMP(comunidadId, {
+        monto: form.monto,
+        concepto: form.concepto.trim() || "Pagos del mes",
+        unidad: form.unidad.trim() || undefined,
+        emailPagador: form.emailPagador.trim() || undefined,
+      });
+      setUltimo(r);
+      setHistorial((h) => [{ ...r, comunidad: comuSel?.nombre ?? "", modo: r.modo }, ...h].slice(0, 12));
+      toast("Punto de pago creado vía Mercado Pago (" + (r.modo ?? "sandbox") + ").");
+      await refetch();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Mercado Pago rechazó la solicitud.");
+    }
+    setBusy(false);
+  };
+
+  const copiar = async (texto: string, etiqueta: string) => {
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast(etiqueta + " copiado al portapapeles.");
+    } catch {
+      toast("No se pudo copiar. Selecciona el texto manualmente.", "warn");
+    }
+  };
+
+  const enmascarar = (t?: string) => (t ? t.slice(0, 7) + "••••" + t.slice(-4) : "—");
+
+  return (
+    <div className="fade-swap space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight text-white">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-neon text-deep"><PlugZap size={18} /></span>
+            Cobros vía Mercado Pago
+          </h2>
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-white/40">
+            Checkout Pro · cada cobro usa las credenciales reales de la comunidad elegida
+          </p>
+        </div>
+        <a href="https://www.mercadopago.cl/developers/panel" target="_blank" rel="noreferrer"
+           className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3.5 py-2 font-mono text-[10.5px] font-bold uppercase tracking-wide text-white/70 transition-colors hover:border-neon hover:text-neon">
+          <ExternalLink size={13} /> Credenciales MP
+        </a>
+      </div>
+
+      {conectadas.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.03] p-10 text-center">
+          <PlugZap size={30} className="mx-auto text-white/25" />
+          <p className="mt-3 font-display text-lg font-bold text-white">Ninguna comunidad tiene Mercado Pago configurado</p>
+          <p className="mx-auto mt-1 max-w-md text-[13px] text-white/50">
+            Pide a un administrador de comunidad que entre a <strong className="text-neon">Cobros en línea → Configurar Mercado Pago</strong> y cargue su Access Token y Public Key. Después podrás generar puntos de pago desde aquí.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+          {/* generador */}
+          <div className="space-y-5">
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-6">
+              <p className="font-mono text-[10.5px] font-bold uppercase tracking-[0.2em] text-white/50">Nuevo punto de pago</p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Field label="Comunidad (tenant)">
+                  <select className="field" value={comunidadId} onChange={(e) => setComunidadId(e.target.value)}>
+                    {conectadas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  </select>
+                </Field>
+                <Field label="Modo de la cuenta">
+                  <div className="flex h-[42px] items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5">
+                    <span className={"h-2 w-2 shrink-0 rounded-full " + (comuSel?.vinculacion.modo === "produccion" ? "bg-neon" : "bg-amber")} />
+                    <span className="font-mono text-[11.5px] font-bold uppercase tracking-wide text-white/80">
+                      {comuSel?.vinculacion.modo === "produccion" ? "Producción · dinero real" : "Sandbox · prueba"}
+                    </span>
+                  </div>
+                </Field>
+                <Field label="Monto (CLP)">
+                  <input className="field" type="number" min={1} step={500} value={form.monto || ""} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />
+                </Field>
+                <Field label="Concepto">
+                  <input className="field" value={form.concepto} onChange={(e) => setForm({ ...form, concepto: e.target.value })} placeholder="Pagos del mes" />
+                </Field>
+                <Field label="Unidad (opcional)">
+                  <input className="field" value={form.unidad} onChange={(e) => setForm({ ...form, unidad: e.target.value.toUpperCase() })} placeholder="P-14" />
+                </Field>
+                <Field label="Correo del pagador (opcional)">
+                  <input className="field" type="email" value={form.emailPagador} onChange={(e) => setForm({ ...form, emailPagador: e.target.value })} placeholder="vecino@correo.cl" />
+                </Field>
+              </div>
+              {error && <p className="mt-4 rounded-lg border border-signal/50 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>}
+              <Btn variant="neon" size="lg" className="mt-5 w-full" onClick={() => void generar()} disabled={busy}>
+                {busy ? <Spinner /> : <><PlugZap size={16} /> Generar cobro con Mercado Pago</>}
+              </Btn>
+            </div>
+
+            {ultimo && (
+              <div className="pop-in rounded-xl border border-neon/50 bg-neon/10 p-6">
+                <p className="flex items-center gap-2 font-mono text-[10.5px] font-bold uppercase tracking-[0.2em] text-neon">
+                  <CheckCircle2MP /> Punto de pago listo · {ultimo.modo ?? "sandbox"}
+                </p>
+                <p className="tnum mt-3 font-display text-3xl font-bold text-white">{fmtCLP(ultimo.monto)}</p>
+                <p className="mt-0.5 text-[13px] text-white/60">{ultimo.concepto}{ultimo.unidad ? " · " + ultimo.unidad : ""}</p>
+                <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/15 bg-deep px-3.5 py-2.5">
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/70">{ultimo.puntoDePago}</span>
+                  <button onClick={() => void copiar(ultimo.puntoDePago, "Punto de pago")} className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/20 text-white/70 transition-colors hover:border-neon hover:text-neon" title="Copiar enlace">
+                    <Copy size={13} />
+                  </button>
+                  <a href={ultimo.puntoDePago} target="_blank" rel="noreferrer" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/20 text-white/70 transition-colors hover:border-neon hover:text-neon" title="Abrir punto de pago">
+                    <ExternalLink size={13} />
+                  </a>
+                </div>
+                <p className="mt-3 font-mono text-[10px] uppercase tracking-wide text-white/35">
+                  id preferencia {ultimo.id} · el webhook concilia el pago automáticamente al aprobarse
+                </p>
+              </div>
+            )}
+
+            {historial.length > 0 && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03]">
+                <p className="border-b border-white/10 px-5 py-3 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">Generados en esta sesión</p>
+                <ul>
+                  {historial.map((h, i) => (
+                    <li key={i} className="flex items-center gap-3 border-b border-white/5 px-5 py-3 last:border-0">
+                      <span className={"h-1.5 w-1.5 shrink-0 rounded-full " + (h.modo === "produccion" ? "bg-neon" : "bg-amber")} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold text-white">{h.concepto}{h.unidad ? " · " + h.unidad : ""}</p>
+                        <p className="font-mono text-[10px] uppercase tracking-wide text-white/35">{h.comunidad} · {new Date(h.creado).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}</p>
+                      </div>
+                      <span className="tnum shrink-0 font-mono text-[13px] font-bold text-white">{fmtCLP(h.monto)}</span>
+                      <button onClick={() => void copiar(h.puntoDePago, "Punto de pago")} className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/15 text-white/50 transition-colors hover:border-neon hover:text-neon" title="Copiar">
+                        <Copy size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {/* credenciales por tenant */}
+          <aside className="space-y-3">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">Credenciales por tenant</p>
+            {data.comunidades.map((c) => {
+              const v = c.vinculacion;
+              return (
+                <div key={c.id} className={"rounded-xl border p-4 transition-colors " + (v.conectada ? "border-neon/30 bg-neon/[0.06]" : "border-white/10 bg-white/[0.02]")}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-[13.5px] font-bold text-white">{c.nombre}</p>
+                    {v.conectada
+                      ? <span className={"shrink-0 rounded-full px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide " + (v.modo === "produccion" ? "bg-neon/20 text-neon" : "bg-amber/20 text-amber")}>{v.modo === "produccion" ? "producción" : "sandbox"}</span>
+                      : <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-white/40">sin configurar</span>}
+                  </div>
+                  <dl className="mt-3 space-y-1.5 font-mono text-[10.5px]">
+                    <div className="flex justify-between gap-3"><dt className="text-white/35">cuenta</dt><dd className="truncate text-white/70">{v.conectada ? v.email : "—"}</dd></div>
+                    <div className="flex justify-between gap-3"><dt className="text-white/35">access token</dt><dd className="truncate text-white/70">{v.conectada ? enmascarar(v.accessToken) : "—"}</dd></div>
+                  </dl>
+                </div>
+              );
+            })}
+            <p className="rounded-lg border border-white/10 p-3 font-mono text-[10px] leading-relaxed text-white/35">
+              El Access Token solo lo usa el backend para llamar a Mercado Pago. El webhook <span className="text-neon">/api/mp/webhook</span> concilia los pagos aprobados.
+            </p>
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CheckCircle2MP() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
+    </svg>
   );
 }
 

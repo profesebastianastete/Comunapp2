@@ -50,6 +50,7 @@ export interface CobroMP {
   concepto: string;
   unidad?: string;
   creado: string;
+  modo?: "sandbox" | "produccion";
 }
 export interface Comunidad {
   id: string; nombre: string; direccion: string; ciudad: string;
@@ -169,7 +170,8 @@ function seed(): DB {
     {
       id: cAlamos, nombre: "Los Álamos", direccion: "Camino El Bosque km 4", ciudad: "Pucón",
       unidades: 28, plan: "PARCELAS", creada: diasAtras(200), estado: "ACTIVA",
-      vinculacion: { conectada: true, email: "tesoreria@losalamos.cl", fecha: diasAtras(40) },
+      // En blanco a propósito: el admin configura sus credenciales reales desde el panel.
+      vinculacion: { conectada: false },
     },
     {
       id: cTorres, nombre: "Torres del Parque", direccion: "Av. Los Aromos 1520", ciudad: "Temuco",
@@ -580,6 +582,7 @@ export async function generarCobroMP(
     concepto: data.concepto,
     unidad: data.unidad,
     creado: ahoraISO(),
+    modo: esSandbox ? "sandbox" : "produccion",
   };
   evento("Cobro generado vía Mercado Pago · " + c.nombre + " · " + fmtCLP(data.monto));
   guardar();
