@@ -1,9 +1,11 @@
 import { ArrowRight, Building2, KeyRound, Lock, RotateCcw, ShieldCheck, Sparkles, Users, Wallet } from "lucide-react";
 import { useState } from "react";
+import { apiMode } from "../lib/api";
 import { login, resetDemo, type Sesion } from "../lib/store";
 import { Btn, Field, Logo, Spinner, toast } from "./ui";
 
 const RAPIDOS = [
+  { rol: "Superadmin", email: "equipo@comunapp.cl", pass: "admin123", icon: Sparkles, c: "#9cc72a" },
   { rol: "Administrador", email: "admin@losalamos.cl", pass: "admin123", icon: ShieldCheck, c: "#12523e" },
   { rol: "Comité", email: "comite@losalamos.cl", pass: "comite123", icon: Users, c: "#1f7d72" },
   { rol: "Propietaria", email: "maria@demo.cl", pass: "demo123", icon: Wallet, c: "#d9a036" },
@@ -64,8 +66,34 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
 
           <div className="mt-7 border-t border-dashed border-line pt-6">
             <p className="mb-3 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-ink3">Entrada rápida · demostración</p>
+
+            {/* superadmin destacado (acceso al panel interno /adminapp) */}
+            {(() => {
+              const q = RAPIDOS[0];
+              return (
+                <button
+                  key={q.rol}
+                  disabled={cargando !== null}
+                  onClick={() => void entrar(q.email, q.pass, q.rol)}
+                  className="group mb-2 flex w-full items-center gap-3 rounded-xl border-[1.5px] border-pine bg-pine px-3.5 py-3 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-12px_rgba(12,59,46,0.6)] disabled:opacity-60"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-neon text-deep transition-transform group-hover:scale-105">
+                    <q.icon size={16} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 text-[13px] font-bold text-paper">
+                      {q.rol}
+                      <span className="rounded-full bg-neon/15 px-2 py-0.5 font-mono text-[8.5px] font-bold uppercase tracking-[0.12em] text-neon">panel interno</span>
+                    </span>
+                    <span className="block truncate font-mono text-[9.5px] uppercase tracking-wide text-paper/55">{q.email}</span>
+                  </span>
+                  <ArrowRight size={15} className="shrink-0 text-neon transition-transform group-hover:translate-x-1" />
+                </button>
+              );
+            })()}
+
             <div className="grid grid-cols-2 gap-2">
-              {RAPIDOS.map((q) => (
+              {RAPIDOS.slice(1).map((q) => (
                 <button
                   key={q.rol}
                   disabled={cargando !== null}
@@ -83,7 +111,9 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
               ))}
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
-              <p className="text-[11px] leading-snug text-ink3">Ambiente de demostración: los datos viven en tu navegador.</p>
+              <p className="text-[11px] leading-snug text-ink3">
+                {apiMode ? "Conectado a la API en Railway · datos reales." : "Ambiente de demostración: los datos viven en tu navegador."}
+              </p>
               <button
                 onClick={() => { resetDemo(); toast("Datos de demostración restablecidos.", "warn"); }}
                 className="flex shrink-0 items-center gap-1.5 rounded-lg border border-dashed border-line px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-ink3 transition-colors hover:border-signal hover:text-signal"
