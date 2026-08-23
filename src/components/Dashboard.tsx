@@ -63,7 +63,27 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
     ];
   }, [esResidente, esAdmin, sesion.rol]);
 
-  if (!usuario) return null;
+  if (!usuario) {
+    // Sesión huérfana (cuenta eliminada, datos reiniciados o caché antigua):
+    // nunca dejar la pantalla en blanco.
+    return (
+      <div className="dotgrid-soft flex min-h-screen flex-col items-center justify-center bg-paper px-5 text-center">
+        <span className="grid h-16 w-16 place-items-center rounded-2xl border border-line bg-card text-amber shadow-soft">
+          <AlertTriangle size={28} />
+        </span>
+        <p className="mt-6 font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-pine2">Sesión vencida</p>
+        <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+          Tu cuenta no está en los datos actuales
+        </h1>
+        <p className="mt-3 max-w-md text-[14px] leading-relaxed text-ink2">
+          Puede que los datos de demostración se hayan reiniciado o que esta sesión sea de una versión anterior. Vuelve a entrar con tu correo y contraseña.
+        </p>
+        <Btn variant="primary" size="lg" className="mt-7" onClick={salir}>
+          <KeyRound size={16} /> Volver a entrar
+        </Btn>
+      </div>
+    );
+  }
 
   return (
     <div className="dotgrid-soft min-h-screen bg-paper">

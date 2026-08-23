@@ -1,11 +1,11 @@
-import { Lock } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Lock, RotateCcw } from "lucide-react";
+import { Component, useEffect, useState, type ReactNode } from "react";
 import AdminApp from "./components/AdminApp";
 import Dashboard from "./components/Dashboard";
 import Entrar from "./components/Entrar";
 import Landing from "./components/Landing";
 import { Btn, Logo, Toaster, toast } from "./components/ui";
-import { getSesion, ROL_LABEL, setSesion, type Sesion } from "./lib/store";
+import { getSesion, ROL_LABEL, setSesion, usuarioActual, type Sesion } from "./lib/store";
 
 /* ── mini router por hash ───────────────────────────────────── */
 function useRuta() {
@@ -46,6 +46,16 @@ export default function App() {
     }
   }, [ruta, sesion]);
 
+  /* sesión huérfana: la cuenta ya no existe en los datos (reset, redeploy, caché vieja) */
+  useEffect(() => {
+    if (sesion && !usuarioActual(sesion)) {
+      setSesion(null);
+      setSesionState(null);
+      toast("Tu sesión venció porque los datos cambiaron. Vuelve a entrar.", "warn");
+      irA("/entrar");
+    }
+  }, [sesion]);
+
   let vista: React.ReactNode;
   if (ruta === "/entrar") {
     vista = sesion
@@ -67,10 +77,51 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      {vista}
+      <ErrorBoundary>{vista}</ErrorBoundary>
       <Toaster />
     </div>
   );
+}
+
+/* Nunca más una pantalla en blanco: atrapa errores de render y ofrece recuperación */
+class ErrorBoundary extends Component<{ children: ReactNode }, { fallo: boolean }> {
+  state = { fallo: false };
+  static getDerivedStateFromError() {
+    return { fallo: true };
+  }
+  render() {
+    if (!this.state.fallo) return this.props.children;
+    return (
+      <div className="dotgrid-soft flex min-h-screen flex-col items-center justify-center bg-paper px-5 text-center">
+        <span className="grid h-16 w-16 place-items-center rounded-2xl border border-line bg-card text-signal shadow-soft">
+          <RotateCcw size={26} />
+        </span>
+        <p className="mt-6 font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-pine2">Algo se soltó</p>
+        <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+          La pantalla encontró un problema
+        </h1>
+        <p className="mt-3 max-w-md text-[14px] leading-relaxed text-ink2">
+          No es tu culpa. Recarga la página; si se repite, vuelve a entrar con tu cuenta (tus datos no se pierden).
+        </p>
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          <Btn variant="primary" size="lg" onClick={() => window.location.reload()}>
+            <RotateCcw size={16} /> Recargar
+          </Btn>
+          <Btn
+            variant="ghost" size="lg"
+            onClick={() => {
+              setSesion(null);
+              window.location.hash = "/entrar";
+              window.location.reload();
+            }}
+          >
+            Volver a entrar
+          </Btn>
+        </div>
+        <div className="mt-10"><Logo /></div>
+      </div>
+    );
+  }
 }
 
 function Redirigir({ a }: { a: string }) {
