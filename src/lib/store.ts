@@ -17,7 +17,39 @@ const CK = "comunapp_api_comunidades";
 
 export type RolCondo = "ADMIN" | "COMITE" | "PROPIETARIO" | "ARRENDATARIO";
 export type Rol = "SUPERADMIN" | RolCondo;
-export type PlanId = "COMITE" | "PARCELAS" | "CUSTOM";
+/** Los planes son dinámicos (los crea el superadmin). Los 3 iniciales usan estos ids. */
+export type PlanId = string;
+
+export interface Plan {
+  id: string;
+  nombre: string;
+  precio: number;      // CLP mensual (0 = gratis)
+  activa: boolean;
+  creada: string;
+}
+
+/** Suscripción de pago automático vía Mercado Pago (preapproval, solo tarjeta de crédito). */
+export interface Suscripcion {
+  id: string;
+  comunidadId: string;
+  unidad: string;
+  email: string;
+  monto: number;          // monto base mensual
+  frecuencia: "MENSUAL";
+  estado: "PENDIENTE" | "AUTORIZADA" | "CANCELADA";
+  mpId?: string;          // id del preapproval en Mercado Pago
+  linkAutorizacion?: string;
+  creada: string;
+}
+
+/** Cuenta Mercado Pago de la PLATAFORMA (la configura el superadmin; cobra las facturas SaaS). */
+export interface MPPlataforma {
+  conectada: boolean;
+  accessToken?: string;
+  publicKey?: string;
+  email?: string;
+  fecha?: string;
+}
 
 export interface Membresia { comunidadId: string; rol: RolCondo; unidad?: string }
 export interface Usuario {
@@ -126,6 +158,7 @@ interface DB {
   movimientos: Movimiento[]; avisos: Aviso[]; reservas: Reserva[];
   votaciones: Votacion[]; bitacora: RegistroAcceso[]; facturas: FacturaSaaS[];
   seriePagos: DiaPago[]; eventos: Evento[];
+  planes: Plan[]; suscripciones: Suscripcion[]; mpPlataforma: MPPlataforma;
 }
 
 /* ── utilidades ─────────────────────────────────────────────── */
@@ -161,10 +194,20 @@ export const ROL_COLOR: Record<Rol, string> = {
   SUPERADMIN: "#c9f24b", ADMIN: "#12523e", COMITE: "#1f7d72",
   PROPIETARIO: "#d9a036", ARRENDATARIO: "#b0793a",
 };
-export const PLAN_LABEL: Record<PlanId, string> = {
-  COMITE: "Comité", PARCELAS: "Comunidad de Parcelas", CUSTOM: "Personalizado",
+/* Fallbacks históricos: la fuente de verdad son los planes guardados (ver nombreDePlan/precioDePlan). */
+export const PLAN_LABEL: Record<string, string> = {
+  COMITE: "Comité", PARCELAS: "Comunidades", CUSTOM: "Personalizado",
 };
-export const PLAN_PRECIO: Record<PlanId, number> = { COMITE: 0, PARCELAS: 29900, CUSTOM: 89000 };
+export const PLAN_PRECIO: Record<string, number> = { COMITE: 0, PARCELAS: 29900, CUSTOM: 89000 };
+
+export function nombreDePlan(planId: string): string {
+  const p = db().planes.find((x) => x.id === planId);
+  return p ? p.nombre : (PLAN_LABEL[planId] ?? planId);
+}
+export function precioDePlan(planId: string): number {
+  const p = db().planes.find((x) => x.id === planId);
+  return p ? p.precio : (PLAN_PRECIO[planId] ?? 0);
+}
 
 /* ── seed ───────────────────────────────────────────────────── */
 function seed(): DB {
@@ -304,7 +347,23 @@ function seed(): DB {
     { id: uid(), fecha: diasAtras(3), texto: "Recordatorios de pago enviados (28 unidades)" },
   ];
 
-  return { usuarios, comunidades, cobros, pagos, movimientos: movs, avisos, reservas, votaciones, bitacora, facturas, seriePagos, eventos };
+  // planes (los gestiona el superadmin desde su panel)
+  const planes: Plan[] = [
+    { id: "COMITE", nombre: "Comité", precio: 0, activa: true, creada: diasAtras(240) },
+    { id: "PARCELAS", nombre: "Comunidades", precio: 29900, activa: true, creada: diasAtras(240) },
+    { id: "CUSTOM", nombre: "Personalizado", precio: 89000, activa: true, creada: diasAtras(240) },
+  ];
+
+  // suscripciones de pago automático (Mercado Pago · solo tarjeta de crédito)
+  const suscripciones: Suscripcion[] = [
+    { id: uid(), comunidadId: cAlamos, unidad: "P-03", email: "vecino03@losalamos.cl", monto: 55000, frecuencia: "MENSUAL", estado: "AUTORIZADA", mpId: "PREAPP-20411", creada: diasAtras(45) },
+    { id: uid(), comunidadId: cAlamos, unidad: "P-18", email: "vecino18@losalamos.cl", monto: 55000, frecuencia: "MENSUAL", estado: "PENDIENTE", mpId: "PREAPP-20577", linkAutorizacion: "https://sandbox.mercadopago.cl/subscriptions/checkout?preapproval_id=PREAPP-20577", creada: diasAtras(2) },
+  ];
+
+  // cuenta Mercado Pago de la plataforma (vacía: la configura el superadmin)
+  const mpPlataforma: MPPlataforma = { conectada: false };
+
+  return { usuarios, comunidades, cobros, pagos, movimientos: movs, avisos, reservas, votaciones, bitacora, facturas, seriePagos, eventos, planes, suscripciones, mpPlataforma };
 }
 
 /* ── persistencia ───────────────────────────────────────────── */
@@ -313,7 +372,15 @@ function db(): DB {
   if (cache) return cache;
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) { cache = JSON.parse(raw) as DB; return cache; }
+    if (raw) {
+      const d = JSON.parse(raw) as DB;
+      // Migración: agrega campos nuevos a datos guardados en versiones previas
+      if (!d.planes) d.planes = seed().planes;
+      if (!d.suscripciones) d.suscripciones = [];
+      if (!d.mpPlataforma) d.mpPlataforma = { conectada: false };
+      cache = d;
+      return cache;
+    }
   } catch { /* seed */ }
   cache = seed();
   guardar();
@@ -417,6 +484,7 @@ export interface DatosComunidad {
   miembros: { usuario: Usuario; rol: RolCondo; unidad?: string }[];
   cobros: Cobro[]; pagos: Pago[]; movimientos: Movimiento[];
   avisos: Aviso[]; reservas: Reserva[]; votaciones: Votacion[]; bitacora: RegistroAcceso[];
+  suscripciones: Suscripcion[];
 }
 
 export async function datosComunidad(comunidadId: string): Promise<DatosComunidad> {
@@ -448,6 +516,7 @@ export async function datosComunidad(comunidadId: string): Promise<DatosComunida
     reservas: d.reservas.filter((x) => x.comunidadId === comunidadId),
     votaciones: d.votaciones.filter((x) => x.comunidadId === comunidadId),
     bitacora: d.bitacora.filter((x) => x.comunidadId === comunidadId),
+    suscripciones: d.suscripciones.filter((x) => x.comunidadId === comunidadId),
   };
 }
 
@@ -762,13 +831,17 @@ export async function crearVecino(comunidadId: string, data: { nombre: string; e
 }
 
 /* ── súper admin · SaaS ─────────────────────────────────────── */
-export async function listadoSaaS() {
-  if (EN_API) {
-    return (await api.listadoSaaS()) as unknown as {
-      comunidades: (Comunidad & { usuarios: number; cobrosMes: number; recaudado: number })[];
-      usuarios: Usuario[]; facturas: FacturaSaaS[]; seriePagos: DiaPago[]; eventos: Evento[];
-    };
-  }
+export interface ListadoSaaS {
+  comunidades: (Comunidad & { usuarios: number; cobrosMes: number; recaudado: number })[];
+  usuarios: Usuario[]; facturas: FacturaSaaS[]; seriePagos: DiaPago[]; eventos: Evento[];
+  planes: Plan[];
+  mpPlataforma: MPPlataforma;
+}
+
+const enmascarar = (s?: string) => (s ? s.slice(0, 7) + "••••" + s.slice(-4) : undefined);
+
+export async function listadoSaaS(): Promise<ListadoSaaS> {
+  if (EN_API) return (await api.listadoSaaS()) as unknown as ListadoSaaS;
   await delay(450);
   const d = db();
   return {
@@ -779,7 +852,144 @@ export async function listadoSaaS() {
       recaudado: d.pagos.filter((p) => p.comunidadId === c.id).reduce((a, p) => a + p.monto, 0),
     })),
     usuarios: d.usuarios, facturas: d.facturas, seriePagos: d.seriePagos, eventos: d.eventos,
+    planes: d.planes,
+    mpPlataforma: {
+      ...d.mpPlataforma,
+      accessToken: enmascarar(d.mpPlataforma.accessToken),
+      publicKey: enmascarar(d.mpPlataforma.publicKey),
+    },
   };
+}
+
+/* ── súper admin · planes dinámicos ─────────────────────────── */
+export async function crearPlan( { nombre: string; precio: number }): Promise<Plan> {
+  if (EN_API) return api.crearPlan(data);
+  await delay(500);
+  const d = db();
+  if (d.planes.some((p) => p.nombre.toLowerCase() === data.nombre.trim().toLowerCase()))
+    throw new Error("Ya existe un plan con ese nombre.");
+  const p: Plan = { id: "plan_" + uid().slice(0, 8), nombre: data.nombre.trim(), precio: Math.max(0, data.precio), activa: true, creada: ahoraISO() };
+  d.planes.push(p);
+  evento("Plan creado: " + p.nombre + " · " + fmtCLP(p.precio) + "/mes");
+  guardar();
+  return p;
+}
+
+export async function actualizarPlan(planId: string,  { nombre?: string; precio?: number; activa?: boolean }) {
+  if (EN_API) return api.actualizarPlan(planId, data);
+  await delay(450);
+  const p = db().planes.find((x) => x.id === planId);
+  if (!p) throw new Error("Plan no encontrado.");
+  if (data.nombre !== undefined) p.nombre = data.nombre.trim();
+  if (data.precio !== undefined) p.precio = Math.max(0, data.precio);
+  if (data.activa !== undefined) p.activa = data.activa;
+  evento("Plan actualizado: " + p.nombre + " · " + fmtCLP(p.precio) + "/mes");
+  guardar();
+}
+
+export async function eliminarPlan(planId: string) {
+  if (EN_API) return api.eliminarPlan(planId);
+  await delay(450);
+  const d = db();
+  const enUso = d.comunidades.filter((c) => c.plan === planId).length;
+  if (enUso > 0) throw new Error("No se puede eliminar: " + enUso + " comunidad(es) usan este plan.");
+  const p = d.planes.find((x) => x.id === planId);
+  d.planes = d.planes.filter((x) => x.id !== planId);
+  evento("Plan eliminado: " + (p?.nombre ?? planId));
+  guardar();
+}
+
+/* ── súper admin · cuenta Mercado Pago de la plataforma ─────── */
+export async function configurarMPPlataforma(cfg: { accessToken: string; publicKey: string; email: string }): Promise<ResultadoMP> {
+  if (EN_API) return api.configurarMPPlataforma(cfg);
+  await delay(1100);
+  const d = db();
+  d.mpPlataforma = { conectada: true, accessToken: cfg.accessToken, publicKey: cfg.publicKey, email: cfg.email, fecha: ahoraISO() };
+  evento("Cuenta Mercado Pago de la plataforma configurada");
+  guardar();
+  return { ok: true, cuenta: cfg.email, mensaje: "Credenciales de la plataforma guardadas." };
+}
+
+export async function probarMPPlataforma(): Promise<ResultadoMP> {
+  if (EN_API) return api.probarMPPlataforma();
+  await delay(1300);
+  const v = db().mpPlataforma;
+  if (!v.accessToken) return { ok: false, mensaje: "Primero configura el Access Token de la plataforma." };
+  const esSandbox = v.accessToken.includes("TEST");
+  return {
+    ok: true, cuenta: v.email ?? "plataforma@mercadopago.cl", siteId: esSandbox ? "MLA (sandbox)" : "MLC",
+    mensaje: esSandbox ? "Conexión correcta en sandbox." : "Conexión correcta. La plataforma puede cobrar suscripciones.",
+  };
+}
+
+export async function desvincularMPPlataforma() {
+  if (EN_API) return api.desvincularMPPlataforma();
+  await delay(400);
+  const d = db();
+  d.mpPlataforma = { conectada: false };
+  evento("Cuenta Mercado Pago de la plataforma desconectada");
+  guardar();
+}
+
+/* ── suscripciones de pago automático (Mercado Pago · preapproval) ── */
+
+/** Suscripción SaaS: la comunidad autoriza el pago automático de su cuenta (facturas) con tarjeta de crédito. */
+export async function suscribirFacturaMP(facturaId: string): Promise<CobroMP> {
+  if (EN_API) return api.suscribirFacturaMP(facturaId);
+  await delay(1700);
+  const d = db();
+  if (!d.mpPlataforma.accessToken)
+    throw new Error("Configura primero la cuenta Mercado Pago de la plataforma.");
+  const f = d.facturas.find((x) => x.id === facturaId);
+  if (!f) throw new Error("Factura no encontrada.");
+  const c = d.comunidades.find((x) => x.id === f.comunidadId)!;
+  const com = calcularComision(f.monto);
+  const esSandbox = d.mpPlataforma.accessToken.includes("TEST");
+  const preId = "PREAPP-" + uid().slice(0, 8).toUpperCase();
+  evento("Suscripción creada para " + c.nombre + " · " + fmtMes(f.periodo));
+  guardar();
+  return {
+    id: preId,
+    puntoDePago: (esSandbox ? "https://sandbox.mercadopago.cl/subscriptions/checkout?preapproval_id=" : "https://www.mercadopago.cl/subscriptions/checkout?preapproval_id=") + preId,
+    monto: f.monto, total: com.total, comisionApp: com.comisionApp, comisionMP: com.comisionMP,
+    concepto: "Suscripción mensual · " + f.plan + " · " + fmtMes(f.periodo),
+    creado: ahoraISO(), modo: esSandbox ? "sandbox" : "produccion",
+  };
+}
+
+/** Suscripción de vecino: el admin/comité crea el pago automático del mes para una unidad. */
+export async function crearSuscripcion(
+  comunidadId: string,
+   { unidad: string; email: string; monto: number },
+): Promise<Suscripcion> {
+  if (EN_API) return api.crearSuscripcion(comunidadId, data);
+  await delay(1500);
+  const d = db();
+  const c = d.comunidades.find((x) => x.id === comunidadId)!;
+  if (!c.vinculacion.accessToken)
+    throw new Error("La comunidad debe configurar primero sus credenciales de Mercado Pago (Cobros en línea).");
+  const esSandbox = c.vinculacion.accessToken.includes("TEST");
+  const preId = "PREAPP-" + uid().slice(0, 8).toUpperCase();
+  const s: Suscripcion = {
+    id: uid(), comunidadId, unidad: data.unidad, email: data.email, monto: data.monto,
+    frecuencia: "MENSUAL", estado: "PENDIENTE", mpId: preId,
+    linkAutorizacion: (esSandbox ? "https://sandbox.mercadopago.cl/subscriptions/checkout?preapproval_id=" : "https://www.mercadopago.cl/subscriptions/checkout?preapproval_id=") + preId,
+    creada: ahoraISO(),
+  };
+  d.suscripciones.push(s);
+  evento("Suscripción creada para " + data.unidad + " · " + fmtCLP(data.monto) + "/mes");
+  guardar();
+  return s;
+}
+
+export async function cancelarSuscripcion(comunidadId: string, suscripcionId: string) {
+  if (EN_API) return api.cancelarSuscripcion(comunidadId, suscripcionId);
+  await delay(600);
+  const s = db().suscripciones.find((x) => x.id === suscripcionId && x.comunidadId === comunidadId);
+  if (!s) throw new Error("Suscripción no encontrada.");
+  s.estado = "CANCELADA";
+  evento("Suscripción cancelada · " + s.unidad);
+  guardar();
 }
 
 export async function crearComunidadSaaS(data: { nombre: string; direccion: string; ciudad: string; unidades: number; plan: PlanId; emailAdmin: string; nombreAdmin: string }) {
@@ -889,7 +1099,7 @@ export async function generarFacturasMes(periodo: string): Promise<{ creadas: nu
     if (d.facturas.some((f) => f.comunidadId === c.id && f.periodo === periodo)) continue;
     d.facturas.push({
       id: "f_" + uid().slice(0, 8), comunidadId: c.id, periodo,
-      plan: PLAN_LABEL[c.plan], monto: PRECIO_PLAN[c.plan], estado: "PENDIENTE", fecha: ahoraISO(),
+      plan: nombreDePlan(c.plan), monto: precioDePlan(c.plan), estado: "PENDIENTE", fecha: ahoraISO(),
     });
     creadas++;
   }
