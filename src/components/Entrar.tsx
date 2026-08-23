@@ -11,10 +11,17 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
-  // Si el servidor no responde, la app degrada a datos locales: se avisa una vez.
+  // Si el servidor no responde, la app degrada a datos locales: se avisa una vez,
+  // mostrando la URL intentada para facilitar el diagnóstico de variables de entorno.
   useEffect(() => {
-    const aviso = () =>
-      toast("El servidor no responde; entraste con una copia local de los datos.", "warn");
+    const aviso = (ev: Event) => {
+      const url = (ev as CustomEvent<string>).detail;
+      toast(
+        "Sin conexión con el servidor" + (url ? " (" + url + ")" : "") +
+        ". Se usaron datos locales; revisa VITE_API_URL en Railway.",
+        "warn",
+      );
+    };
     window.addEventListener("comunapp:red-caida", aviso);
     return () => window.removeEventListener("comunapp:red-caida", aviso);
   }, []);
@@ -76,9 +83,6 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
             {error && (
               <div className="space-y-2">
                 <p className="rounded-xl border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>
-                <p className="rounded-xl border border-dashed border-line bg-paper px-3.5 py-2.5 text-center font-mono text-[11px] leading-relaxed text-ink2">
-                  Acceso del equipo · <strong className="text-pine">equipo@comunapp.cl</strong> / <strong className="text-pine">admin123</strong>
-                </p>
                 {!apiMode && (
                   <button
                     type="button"

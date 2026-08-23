@@ -462,7 +462,7 @@ export async function login(email: string, password: string): Promise<Sesion> {
       // para que la app no se rompa y el ingreso pueda continuar. Se avisa abajo.
       if (e instanceof api.ApiError && e.sinRed) {
         caerAModoLocal();
-        window.dispatchEvent(new CustomEvent("comunapp:red-caida"));
+        window.dispatchEvent(new CustomEvent("comunapp:red-caida", { detail: api.API_URL ?? "" }));
       } else {
         throw e; // credenciales incorrectas u otro error HTTP: se propagan
       }
