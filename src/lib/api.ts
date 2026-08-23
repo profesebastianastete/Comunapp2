@@ -20,33 +20,57 @@ export function leerToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
-  constructor(status: number, mensaje: string) {
+  /** true cuando el servidor no respondió (caído, en reposo, sin red o CORS). */
+  sinRed: boolean;
+  constructor(status: number, mensaje: string, sinRed = false) {
     super(mensaje);
     this.status = status;
+    this.sinRed = sinRed;
   }
 }
 
+const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = leerToken();
-  const res = await fetch(API_URL + path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: "Bearer " + token } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    let mensaje = "Error del servidor (" + res.status + ")";
+  // Reintentos: el plan gratuito de Railway duerme el servicio tras inactividad;
+  // el primer intento lo despierta, los siguientes ya lo encuentran arriba.
+  let ultimoError: unknown = null;
+  for (let intento = 0; intento < 3; intento++) {
+    if (intento > 0) await espera(700 * intento);
     try {
-      const body = await res.json();
-      if (body?.detail) mensaje = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-    } catch { /* sin cuerpo */ }
-    throw new ApiError(res.status, mensaje);
+      const res = await fetch(API_URL + path, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: "Bearer " + token } : {}),
+          ...(init.headers ?? {}),
+        },
+      });
+      if (!res.ok) {
+        let mensaje = "Error del servidor (" + res.status + ")";
+        try {
+          const body = await res.json();
+          if (body?.detail) mensaje = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+        } catch { /* sin cuerpo */ }
+        throw new ApiError(res.status, mensaje);
+      }
+      return (await res.json()) as T;
+    } catch (e) {
+      // Si el servidor respondió con un error HTTP, no reintentar: propagar.
+      if (e instanceof ApiError) throw e;
+      // Error de red (TypeError "Failed to fetch"): el servidor no respondió.
+      ultimoError = e;
+    }
   }
-  return (await res.json()) as T;
+  void ultimoError;
+  throw new ApiError(
+    0,
+    "No se pudo conectar con el servidor. Puede estar en reposo o sin conexión: espera unos segundos y vuelve a intentar.",
+    true,
+  );
 }
 
 const get = <T>(path: string) => http<T>(path);

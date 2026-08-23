@@ -145,9 +145,6 @@ function AccesoRestringido({ entrar, volver }: { entrar: () => void; volver: () 
         <Btn variant="neon" size="lg" onClick={entrar}>Ingresar con mi cuenta</Btn>
         <Btn variant="ghost" size="lg" onClick={volver} className="border-white/25! text-white/80! hover:border-white! hover:bg-white/10!">Volver al sitio</Btn>
       </div>
-      <p className="mt-10 font-mono text-[10px] uppercase tracking-[0.18em] text-white/30">
-        acceso del equipo: equipo@comunapp.cl · admin123
-      </p>
       <div className="mt-12"><Logo dark /></div>
     </div>
   );

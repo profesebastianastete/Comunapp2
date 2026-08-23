@@ -1,5 +1,5 @@
 import { ArrowRight, Building2, Eye, EyeOff, Lock, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiMode } from "../lib/api";
 import { login, resetDemo, type Sesion } from "../lib/store";
 import { Btn, Field, Logo, Spinner, toast } from "./ui";
@@ -10,6 +10,14 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
   const [verPass, setVerPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
+
+  // Si el servidor no responde, la app degrada a datos locales: se avisa una vez.
+  useEffect(() => {
+    const aviso = () =>
+      toast("El servidor no responde; entraste con una copia local de los datos.", "warn");
+    window.addEventListener("comunapp:red-caida", aviso);
+    return () => window.removeEventListener("comunapp:red-caida", aviso);
+  }, []);
 
   const entrar = async () => {
     if (!email || !pass) { setError("Escribe tu correo y contraseña."); return; }

@@ -9,7 +9,19 @@
 
 import * as api from "./api";
 
-const EN_API = api.apiMode;
+let EN_API = api.apiMode;
+
+/** Indica si la app está intentando hablar con el servidor (modo real). */
+export const usandoServidor = () => EN_API;
+
+/**
+ * Caída con gracia: si el servidor no responde, la aplicación pasa a operar con
+ * datos locales para no romperse. Se avisa al usuario con un toast. Solo se
+ * activa ante un fallo de red, nunca ante credenciales incorrectas.
+ */
+export function caerAModoLocal() {
+  EN_API = false;
+}
 
 /* Caché local del modo API (para las lecturas síncronas: usuarioActual, etc.) */
 const UK = "comunapp_api_usuario";
@@ -439,11 +451,22 @@ export async function cambiarPassword(actual: string, nueva: string) {
 
 export async function login(email: string, password: string): Promise<Sesion> {
   if (EN_API) {
-    const s = await api.login(email, password);
-    const u = await api.me();
-    localStorage.setItem(UK, JSON.stringify(u));
-    setSesion(s);
-    return s;
+    try {
+      const s = await api.login(email, password);
+      const u = await api.me();
+      localStorage.setItem(UK, JSON.stringify(u));
+      setSesion(s);
+      return s;
+    } catch (e) {
+      // El servidor no respondió (caído o en reposo): degradamos a datos locales
+      // para que la app no se rompa y el ingreso pueda continuar. Se avisa abajo.
+      if (e instanceof api.ApiError && e.sinRed) {
+        caerAModoLocal();
+        window.dispatchEvent(new CustomEvent("comunapp:red-caida"));
+      } else {
+        throw e; // credenciales incorrectas u otro error HTTP: se propagan
+      }
+    }
   }
   await delay(650);
   const correo = email.trim().toLowerCase();
