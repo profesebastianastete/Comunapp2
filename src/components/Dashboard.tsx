@@ -8,7 +8,7 @@ import {
   fmtFechaHora, fmtMes, pagarCobro, ROL_LABEL, usuarioActual, votar,
   type Aviso, type Cobro, type DatosComunidad, type Pago, type Reserva, type Sesion, type Votacion,
 } from "../lib/store";
-import { Btn, Empty, EstadoTag, Field, Logo, Modal, ModalCambiarPassword, ModoBadge, RolTag, Spinner, toast } from "./ui";
+import { Btn, Empty, EstadoTag, Field, Logo, Modal, ModalCambiarPassword, RolTag, Spinner, toast } from "./ui";
 import { FormMovimiento, ModuloBitacora, ModuloCobranza, ModuloPagosMes, ModuloSuscripciones, ModuloVecinos } from "./DashAdmin";
 
 type Modulo =
@@ -102,7 +102,6 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
               <p className="text-[12.5px] font-semibold leading-tight text-ink">{usuario.nombre}</p>
               <p className="font-mono text-[9.5px] uppercase tracking-wide text-ink3">{sesion.unidad ?? ROL_LABEL[sesion.rol]}</p>
             </div>
-            <ModoBadge className="hidden md:inline-flex" />
             <RolTag rol={sesion.rol} label={ROL_LABEL[sesion.rol]} />
             <button
               onClick={() => setModalPass(true)}

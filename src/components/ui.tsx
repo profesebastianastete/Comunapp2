@@ -1,36 +1,7 @@
 import { Check, Copy, Inbox, KeyRound } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { cambiarPassword, enLinea, ROL_COLOR, type Rol } from "../lib/store";
-
-/* ── insignia de modo (real vs. local) ─────────────────────────
-   Siempre visible: nadie puede confundir con qué datos está trabajando. */
-export function ModoBadge({ dark = false, className = "" }: { dark?: boolean; className?: string }) {
-  if (enLinea) {
-    return (
-      <span
-        title="Conectado al servidor: los datos son reales, compartidos y persistentes."
-        className={
-          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[9.5px] font-bold uppercase tracking-[0.12em] " +
-          (dark ? "bg-neon/15 text-neon" : "bg-pine text-neon") + " " + className
-        }
-      >
-        <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-neon" /> En línea · datos reales
-      </span>
-    );
-  }
-  return (
-    <span
-      title="No hay servidor configurado: esta copia funciona sin conexión y los datos viven solo en este navegador."
-      className={
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[9.5px] font-bold uppercase tracking-[0.12em] " +
-        (dark ? "bg-amber/15 text-amber" : "bg-amber/15 text-[#8a6114]") + " " + className
-      }
-    >
-      <span className="h-1.5 w-1.5 rounded-full bg-amber" /> Modo local · sin servidor
-    </span>
-  );
-}
+import { cambiarPassword, ROL_COLOR, type Rol } from "../lib/store";
 
 /* ── logo ───────────────────────────────────────────────────── */
 export function Logo({ dark = false, small = false }: { dark?: boolean; small?: boolean }) {

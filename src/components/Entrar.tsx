@@ -2,7 +2,7 @@ import { ArrowRight, Building2, Eye, EyeOff, Lock, RotateCcw } from "lucide-reac
 import { useState } from "react";
 import { apiMode } from "../lib/api";
 import { login, resetDemo, type Sesion } from "../lib/store";
-import { Btn, Field, Logo, ModoBadge, Spinner, toast } from "./ui";
+import { Btn, Field, Logo, Spinner, toast } from "./ui";
 
 export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => void; volver: () => void }) {
   const [email, setEmail] = useState("");
@@ -33,10 +33,7 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
         </div>
 
         <div className="rounded-[22px] border border-line bg-card p-8 shadow-lift">
-          <div className="flex items-start justify-between gap-3">
-            <p className="font-mono text-[10.5px] font-bold uppercase tracking-[0.22em] text-pine2">— Bienvenido de vuelta</p>
-            <ModoBadge />
-          </div>
+          <p className="font-mono text-[10.5px] font-bold uppercase tracking-[0.22em] text-pine2">— Bienvenido de vuelta</p>
           <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ink">Entra a tu comunidad</h1>
           <p className="mt-1.5 text-[13.5px] text-ink3">Pagos del mes, reservas, votaciones y avisos te esperan.</p>
 
@@ -77,11 +74,11 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
                     onClick={() => {
                       resetDemo();
                       setError(null);
-                      toast("Datos locales restablecidos. Vuelve a intentar.", "ok");
+                      toast("Acceso restablecido. Vuelve a intentar.", "ok");
                     }}
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-pine/40 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-pine transition-colors hover:border-pine hover:bg-pine/5"
                   >
-                    <RotateCcw size={13} /> Restablecer datos locales
+                    <RotateCcw size={13} /> Restablecer acceso
                   </button>
                 )}
               </div>

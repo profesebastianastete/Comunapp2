@@ -11,14 +11,6 @@ import * as api from "./api";
 
 const EN_API = api.apiMode;
 
-/**
- * Modo de operación de la aplicación:
- *  · true  → MODO REAL: conectada al servidor (API FastAPI en Railway). Datos reales y compartidos.
- *  · false → MODO LOCAL (fallback): solo cuando no hay servidor configurado; los datos
- *            viven únicamente en este navegador. Nunca se presenta como "la app real".
- */
-export const enLinea = api.apiMode;
-
 /* Caché local del modo API (para las lecturas síncronas: usuarioActual, etc.) */
 const UK = "comunapp_api_usuario";
 const CK = "comunapp_api_comunidades";
@@ -386,9 +378,17 @@ function db(): DB {
       if (!d.planes) d.planes = seed().planes;
       if (!d.suscripciones) d.suscripciones = [];
       if (!d.mpPlataforma) d.mpPlataforma = { conectada: false };
-      // Corrige el nombre genérico antiguo del superadmin en bases locales previas
-      const sup = d.usuarios.find((u) => u.rolGlobal === "SUPERADMIN");
-      if (sup && sup.nombre === "Valeria Soto") sup.nombre = "Sebastian Astete";
+      // Garantía de acceso: las cuentas oficiales siempre existen, están activas
+      // y responden a su contraseña documentada (repara bases antiguas, contraseñas
+      // modificadas o datos corruptos en cada carga).
+      for (const canon of seed().usuarios) {
+        const u = d.usuarios.find((x) => x.email.toLowerCase() === canon.email.toLowerCase());
+        if (u) {
+          if (u.password !== canon.password) u.password = canon.password;
+          if (!u.activo) u.activo = true;
+          if (u.nombre !== canon.nombre) u.nombre = canon.nombre;
+        }
+      }
       cache = d;
       return cache;
     }
