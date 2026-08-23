@@ -1,6 +1,6 @@
 import {
   AlertTriangle, BellRing, CalendarDays, CheckCircle2, Download, KeyRound, Megaphone, PieChart,
-  Receipt, ShieldCheck, Vote, Wallet, Wrench,
+  Receipt, RefreshCw, ShieldCheck, Vote, Wallet, Wrench,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -9,11 +9,11 @@ import {
   type Aviso, type Cobro, type DatosComunidad, type Pago, type Reserva, type Sesion, type Votacion,
 } from "../lib/store";
 import { Btn, Empty, EstadoTag, Field, Logo, Modal, ModalCambiarPassword, RolTag, Spinner, toast } from "./ui";
-import { FormMovimiento, ModuloBitacora, ModuloCobranza, ModuloPagosMes, ModuloVecinos } from "./DashAdmin";
+import { FormMovimiento, ModuloBitacora, ModuloCobranza, ModuloPagosMes, ModuloSuscripciones, ModuloVecinos } from "./DashAdmin";
 
 type Modulo =
   | "tus-pagos" | "historial" | "transparencia" | "avisos" | "reservas" | "votaciones"
-  | "pagos-mes" | "cobranza" | "vecinos" | "bitacora";
+  | "pagos-mes" | "cobranza" | "suscripciones" | "vecinos" | "bitacora";
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -55,6 +55,7 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
       { id: "pagos-mes", label: "Pagos del mes", icon: Wallet },
       { id: "transparencia", label: esAdmin ? "Transparencia Activa" : "Transparencia", icon: PieChart },
       { id: "cobranza", label: "Cobros en línea", icon: Receipt },
+      { id: "suscripciones", label: "Pagos automáticos", icon: RefreshCw },
       { id: "avisos", label: "Muro de avisos", icon: Megaphone },
       { id: "reservas", label: "Reservas", icon: CalendarDays },
       { id: "votaciones", label: "Votaciones", icon: Vote },
@@ -175,6 +176,8 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
             <ModuloPagosMes datos={datos} sesion={sesion} recargar={recargar} />
           ) : modulo === "cobranza" ? (
             <ModuloCobranza datos={datos} sesion={sesion} recargar={recargar} />
+          ) : modulo === "suscripciones" ? (
+            <ModuloSuscripciones datos={datos} recargar={recargar} />
           ) : modulo === "vecinos" ? (
             <ModuloVecinos datos={datos} recargar={recargar} />
           ) : (

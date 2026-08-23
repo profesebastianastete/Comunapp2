@@ -1,17 +1,24 @@
 import {
   Activity, Building2, CheckCheck, Copy, CreditCard, ExternalLink, Eye, EyeOff, KeyRound,
-  Pencil, PlugZap, PlusCircle, Power, TrendingUp, UserCog, UserPlus, Users,
+  Layers, Link2, Pencil, PlugZap, PlusCircle, Power, RefreshCw, Settings2, Trash2, TrendingUp, UserCog, UserPlus, Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  calcularComision, cobrarFacturaMP, crearComunidadSaaS, crearUsuarioSaaS, fmtCLP, fmtFecha, fmtMes,
-  generarCobroMP, generarFacturasMes, listadoSaaS, marcarFacturaPagada, PLAN_LABEL, ROL_LABEL,
-  setPasswordUsuario, toggleEstadoComunidad, toggleUsuarioActivo, usuarioActual,
-  type CobroFacturaMP, type CobroMP, type PlanId, type RolCondo, type Sesion,
+  actualizarPlan, calcularComision, cobrarFacturaMP, configurarMPPlataforma, crearComunidadSaaS,
+  crearPlan, crearUsuarioSaaS, desvincularMPPlataforma, eliminarPlan, fmtCLP, fmtFecha, fmtMes,
+  generarCobroMP, generarFacturasMes, listadoSaaS, marcarFacturaPagada, probarMPPlataforma,
+  ROL_LABEL, setPasswordUsuario, suscribirFacturaMP, toggleEstadoComunidad, toggleUsuarioActivo,
+  usuarioActual,
+  type CobroFacturaMP, type CobroMP, type MPPlataforma, type Plan, type PlanId, type RolCondo, type Sesion, type Suscripcion,
 } from "../lib/store";
 import { Btn, CountUp, Empty, EstadoTag, Field, Modal, ModalCambiarPassword, Spinner, toast } from "./ui";
 
-type Tab = "metricas" | "comunidades" | "usuarios" | "cobrosmp" | "facturacion" | "actividad";
+/* Nombre de plan: prioriza la lista dinámica, cae a las etiquetas clásicas. */
+const FALLBACK_PLAN: Record<string, string> = { COMITE: "Comité", PARCELAS: "Comunidad de Parcelas", CUSTOM: "Personalizado" };
+const planNombre = (planes: Plan[] | undefined, id: string) =>
+  planes?.find((p) => p.id === id)?.nombre ?? FALLBACK_PLAN[id] ?? id;
+
+type Tab = "metricas" | "comunidades" | "usuarios" | "planes" | "suscripciones" | "cobrosmp" | "facturacion" | "config" | "actividad";
 
 interface SaaSData {
   comunidades: {
@@ -33,6 +40,8 @@ interface SaaSData {
   facturas: { id: string; comunidadId: string; periodo: string; plan: string; monto: number; estado: string; fecha: string }[];
   seriePagos: { dia: string; monto: number; pagos: number }[];
   eventos: { id: string; fecha: string; texto: string }[];
+  planes: Plan[];
+  mpPlataforma: MPPlataforma;
 }
 
 export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () => void }) {
@@ -49,7 +58,10 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
 
   const kpis = useMemo(() => {
     if (!data) return null;
-    const mrr = data.comunidades.filter((c) => c.estado === "ACTIVA").reduce((a, c) => a + ({ COMITE: 0, PARCELAS: 29900, CUSTOM: 89000 } as Record<PlanId, number>)[c.plan], 0);
+    const precioDe = (planId: string) =>
+      data.planes.find((p) => p.id === planId)?.precio ??
+      ({ COMITE: 0, PARCELAS: 29900, CUSTOM: 89000 } as Record<PlanId, number>)[planId as PlanId] ?? 0;
+    const mrr = data.comunidades.filter((c) => c.estado === "ACTIVA").reduce((a, c) => a + precioDe(c.plan), 0);
     const volumen = data.seriePagos.reduce((a, d) => a + d.monto, 0);
     const pagos = data.seriePagos.reduce((a, d) => a + d.pagos, 0);
     return { mrr, volumen, pagos, comunidades: data.comunidades.length, usuarios: data.usuarios.length };
@@ -59,8 +71,11 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
     { id: "metricas", label: "Métricas", icon: Activity },
     { id: "comunidades", label: "Tenants", icon: Building2 },
     { id: "usuarios", label: "Usuarios", icon: UserCog },
+    { id: "planes", label: "Planes", icon: Layers },
+    { id: "suscripciones", label: "Suscripciones", icon: RefreshCw },
     { id: "cobrosmp", label: "Cobros MP", icon: PlugZap },
     { id: "facturacion", label: "Facturación", icon: CreditCard },
+    { id: "config", label: "Cuenta MP", icon: Settings2 },
     { id: "actividad", label: "Eventos", icon: TrendingUp },
   ];
 
@@ -121,10 +136,16 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
             <Tenants data={data} refetch={refetch} nueva={() => setModalNueva(true)} />
           ) : tab === "usuarios" ? (
             <UsuariosSaaS data={data} comunidades={data.comunidades} refetch={refetch} />
+          ) : tab === "planes" ? (
+            <Planes planes={data.planes} refetch={refetch} />
+          ) : tab === "suscripciones" ? (
+            <SuscripcionesSaaS data={data} refetch={refetch} />
           ) : tab === "cobrosmp" ? (
             <CobrosMP data={data} refetch={refetch} />
           ) : tab === "facturacion" ? (
             <Facturacion data={data} kpis={kpis} refetch={refetch} />
+          ) : tab === "config" ? (
+            <ConfigMPPlataforma mp={data.mpPlataforma} refetch={refetch} />
           ) : (
             <Actividad data={data} />
           )}
@@ -704,6 +725,393 @@ function ModalNuevoUsuario({ comunidades, onClose, onSaved }: {
   );
 }
 
+/* ── planes (crear / editar / eliminar) ── */
+function Planes({ planes, refetch }: { planes: Plan[]; refetch: () => Promise<void> }) {
+  const [nombre, setNombre] = useState("");
+  const [precio, setPrecio] = useState(29900);
+  const [creando, setCreando] = useState(false);
+  const [editando, setEditando] = useState<Plan | null>(null);
+  const [borrar, setBorrar] = useState<Plan | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const crear = async () => {
+    if (!nombre.trim()) { toast("Escribe un nombre para el plan.", "warn"); return; }
+    setCreando(true);
+    try {
+      await crearPlan({ nombre, precio });
+      toast("Plan creado: " + nombre + " · " + fmtCLP(precio) + "/mes.");
+      setNombre(""); setPrecio(29900);
+      await refetch();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "No se pudo crear el plan.", "warn");
+    }
+    setCreando(false);
+  };
+
+  const toggle = async (p: Plan) => {
+    setBusy(p.id);
+    await actualizarPlan(p.id, { activa: !p.activa });
+    await refetch();
+    setBusy(null);
+    toast("Plan " + p.nombre + (p.activa ? " desactivado." : " activado."), p.activa ? "warn" : "ok");
+  };
+
+  return (
+    <div className="fade-swap space-y-6">
+      <div>
+        <h2 className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight text-white">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-neon text-deep"><Layers size={18} /></span>
+          Planes de la plataforma
+        </h2>
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-white/40">
+          {planes.length} planes · el precio se aplica a la facturación mensual
+        </p>
+      </div>
+
+      {/* crear plan */}
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-5">
+        <Field label="Nombre del plan">
+          <input className="field w-64" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej: Comunidad Grande" />
+        </Field>
+        <Field label="Precio mensual (CLP)">
+          <input className="field w-40" type="number" min={0} step={1000} value={precio || ""} onChange={(e) => setPrecio(Number(e.target.value))} />
+        </Field>
+        <Btn variant="neon" onClick={() => void crear()} disabled={creando}>
+          {creando ? <Spinner /> : <><PlusCircle size={15} /> Crear plan</>}
+        </Btn>
+      </div>
+
+      {/* listado */}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {planes.map((p) => (
+          <div key={p.id} className={"card-in rounded-xl border p-5 transition-all " + (p.activa ? "border-white/10 bg-white/[0.03]" : "border-white/5 bg-white/[0.01] opacity-60")}>
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="font-display text-lg font-bold text-white">{p.nombre}</h3>
+              <EstadoTag estado={p.activa ? "ACTIVA" : "SUSPENDIDA"} />
+            </div>
+            <p className="tnum mt-2 font-display text-[30px] font-bold text-neon">
+              {p.precio === 0 ? "Gratis" : fmtCLP(p.precio)}
+              {p.precio > 0 && <span className="ml-1 font-mono text-[11px] font-normal text-white/40">/ mes</span>}
+            </p>
+            <p className="mt-1 font-mono text-[9.5px] uppercase tracking-wide text-white/30">id {p.id} · creado {fmtFecha(p.creada)}</p>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setEditando(p)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white/70 transition-colors hover:border-neon hover:text-neon">
+                <Pencil size={12} /> Editar
+              </button>
+              <button disabled={busy === p.id} onClick={() => void toggle(p)} className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white/70 transition-colors hover:border-amber hover:text-amber disabled:opacity-50">
+                {busy === p.id ? <Spinner className="h-3 w-3" /> : <Power size={12} />} {p.activa ? "Pausar" : "Activar"}
+              </button>
+              <button onClick={() => setBorrar(p)} className="ml-auto grid h-8 w-8 place-items-center rounded-lg border border-white/20 text-white/60 transition-colors hover:border-signal hover:text-signal" title="Eliminar">
+                <Trash2 size={13} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {editando && <ModalEditarPlan plan={editando} onClose={() => setEditando(null)} onSaved={async () => { setEditando(null); await refetch(); }} />}
+
+      <Modal open={!!borrar} onClose={() => setBorrar(null)} title="¿Eliminar plan?">
+        <p className="text-[14px] leading-relaxed text-ink2">
+          Se eliminará <strong className="text-ink">{borrar?.nombre}</strong>. Si hay comunidades usándolo, no podrá borrarse.
+        </p>
+        <div className="mt-6 flex justify-end gap-2.5">
+          <Btn variant="ghost" size="sm" onClick={() => setBorrar(null)}>Cancelar</Btn>
+          <Btn
+            variant="danger" size="sm" disabled={busy === borrar?.id}
+            onClick={async () => {
+              if (!borrar) return;
+              setBusy(borrar.id);
+              try {
+                await eliminarPlan(borrar.id);
+                toast("Plan eliminado: " + borrar.nombre, "warn");
+                setBorrar(null);
+                await refetch();
+              } catch (e) {
+                toast(e instanceof Error ? e.message : "No se pudo eliminar.", "warn");
+              }
+              setBusy(null);
+            }}
+          >
+            {busy === borrar?.id ? <Spinner /> : <><Trash2 size={13} /> Eliminar</>}
+          </Btn>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+function ModalEditarPlan({ plan, onClose, onSaved }: { plan: Plan; onClose: () => void; onSaved: () => Promise<void> }) {
+  const [nombre, setNombre] = useState(plan.nombre);
+  const [precio, setPrecio] = useState(plan.precio);
+  const [busy, setBusy] = useState(false);
+
+  const guardar = async () => {
+    if (!nombre.trim()) { toast("El nombre no puede quedar vacío.", "warn"); return; }
+    setBusy(true);
+    await actualizarPlan(plan.id, { nombre, precio });
+    toast("Plan actualizado.");
+    setBusy(false);
+    await onSaved();
+  };
+
+  return (
+    <Modal open onClose={onClose} title={"Editar plan · " + plan.nombre}>
+      <div className="space-y-4">
+        <Field label="Nombre"><input className="field" value={nombre} onChange={(e) => setNombre(e.target.value)} /></Field>
+        <Field label="Precio mensual (CLP)"><input className="field" type="number" min={0} step={1000} value={precio || ""} onChange={(e) => setPrecio(Number(e.target.value))} /></Field>
+        <div className="flex justify-end gap-2.5 border-t border-line pt-4">
+          <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+          <Btn variant="neon" onClick={() => void guardar()} disabled={busy}>{busy ? <Spinner /> : "Guardar"}</Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/* ── suscripciones SaaS (pago automático de cuentas con tarjeta) ── */
+function SuscripcionesSaaS({ data, refetch }: { data: SaaSData; refetch: () => Promise<void> }) {
+  const pendientes = data.facturas.filter((f) => f.estado === "PENDIENTE" && f.monto > 0);
+  const [autorizando, setAutorizando] = useState<string | null>(null);
+  const [link, setLink] = useState<CobroMP | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const crearSuscripcion = async (facturaId: string) => {
+    setError(null);
+    setAutorizando(facturaId);
+    try {
+      const r = await suscribirFacturaMP(facturaId);
+      setLink(r);
+      await refetch();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo crear la suscripción.");
+    }
+    setAutorizando(null);
+  };
+
+  return (
+    <div className="fade-swap space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight text-white">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-neon text-deep"><RefreshCw size={18} /></span>
+            Suscripciones de pago automático
+          </h2>
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-white/40">
+            La comunidad autoriza con <strong className="text-neon">tarjeta de crédito</strong> y su cuenta se paga sola cada mes
+          </p>
+        </div>
+        <a href="https://www.mercadopago.cl/developers/panel" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3.5 py-2 font-mono text-[10.5px] font-bold uppercase tracking-wide text-white/70 transition-colors hover:border-neon hover:text-neon">
+          <ExternalLink size={13} /> Mercado Pago
+        </a>
+      </div>
+
+      {!data.mpPlataforma.conectada && (
+        <div className="rounded-xl border border-amber/40 bg-amber/10 px-5 py-4">
+          <p className="text-[13px] text-white/80">
+            <strong className="text-amber">Configura primero la cuenta Mercado Pago de la plataforma</strong> (pestaña «Cuenta MP»).
+            Sin ella no se pueden crear suscripciones de cobro automático.
+          </p>
+        </div>
+      )}
+
+      {error && <p className="rounded-lg border border-signal/50 bg-signal/10 px-4 py-3 text-[13px] font-medium text-signal">{error}</p>}
+
+      {pendientes.length === 0 ? (
+        <Empty title="Sin facturas pendientes" sub="Genera la facturación mensual desde la pestaña «Facturación» y aquí podrás convertir cada cuenta en una suscripción." />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03]">
+          <table className="w-full min-w-[720px] border-collapse text-left">
+            <thead>
+              <tr className="border-b border-white/10 font-mono text-[9.5px] uppercase tracking-[0.18em] text-white/40">
+                <th className="px-5 py-3.5">Comunidad</th>
+                <th className="px-5 py-3.5">Periodo</th>
+                <th className="px-5 py-3.5">Monto</th>
+                <th className="px-5 py-3.5">Con comisión (5%)</th>
+                <th className="px-5 py-3.5 text-right">Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendientes.map((f) => {
+                const c = data.comunidades.find((x) => x.id === f.comunidadId);
+                const com = calcularComision(f.monto);
+                return (
+                  <tr key={f.id} className="border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.04]">
+                    <td className="px-5 py-4">
+                      <p className="text-[13.5px] font-semibold text-white">{c?.nombre ?? f.comunidadId}</p>
+                      <p className="font-mono text-[10px] uppercase text-white/35">{f.plan}</p>
+                    </td>
+                    <td className="px-5 py-4 font-mono text-[12px] text-white/70">{fmtMes(f.periodo)}</td>
+                    <td className="tnum px-5 py-4 font-mono text-[13px] text-white/70">{fmtCLP(f.monto)}</td>
+                    <td className="tnum px-5 py-4 font-mono text-[13px] font-bold text-neon">{fmtCLP(com.total)}</td>
+                    <td className="px-5 py-4 text-right">
+                      <button
+                        disabled={autorizando === f.id || !data.mpPlataforma.conectada}
+                        onClick={() => void crearSuscripcion(f.id)}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-neon/50 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wide text-neon transition-colors hover:bg-neon hover:text-deep disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {autorizando === f.id ? <Spinner className="h-3 w-3" /> : <RefreshCw size={12} />} Crear suscripción
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {link && (
+        <Modal open onClose={() => setLink(null)} title="Suscripción creada · autorizar con tarjeta" wide>
+          <div className="space-y-4">
+            <p className="rounded-xl border border-pine/30 bg-pine/5 px-4 py-3 text-[13px] leading-relaxed text-ink2">
+              Envía este enlace a la comunidad. Al abrirlo, Mercado Pago le pedirá <strong className="text-ink">autorizar el cargo automático con su tarjeta de crédito</strong>.
+              A partir de ahí, la cuenta se cobra sola cada mes (con la comisión del 5% incluida).
+            </p>
+            <div className="flex items-center justify-between rounded-xl border border-line bg-paper px-5 py-4">
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ink3">Cargo mensual autorizado</p>
+                <p className="tnum mt-1 font-display text-3xl font-bold text-pine">{fmtCLP(link.total)}</p>
+              </div>
+              <span className={"rounded-full px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide " + (link.modo === "produccion" ? "bg-pine text-neon" : "bg-amber/20 text-[#8a6114]")}>
+                {link.modo === "produccion" ? "Producción" : "Sandbox"}
+              </span>
+            </div>
+            <DesgloseComision base={link.monto} comisionApp={link.comisionApp} comisionMP={link.comisionMP} total={link.total} />
+            <div className="flex items-center gap-2 rounded-lg border border-line bg-card px-3.5 py-2.5">
+              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink2">{link.puntoDePago}</span>
+              <button onClick={() => { void navigator.clipboard.writeText(link.puntoDePago); toast("Enlace copiado."); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line text-ink2 transition-colors hover:border-pine hover:text-pine" title="Copiar">
+                <Copy size={13} />
+              </button>
+              <a href={link.puntoDePago} target="_blank" rel="noreferrer" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line text-ink2 transition-colors hover:border-pine hover:text-pine" title="Abrir">
+                <ExternalLink size={13} />
+              </a>
+            </div>
+            <div className="flex justify-end border-t border-line pt-4">
+              <Btn variant="neon" onClick={() => { void navigator.clipboard.writeText(link.puntoDePago); toast("Enlace de autorización copiado."); }}>
+                <Copy size={15} /> Copiar enlace de autorización
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ── cuenta Mercado Pago de la plataforma (minimalista) ── */
+function ConfigMPPlataforma({ mp, refetch }: { mp: MPPlataforma; refetch: () => Promise<void> }) {
+  const [accessToken, setAccessToken] = useState("");
+  const [publicKey, setPublicKey] = useState("");
+  const [email, setEmail] = useState("");
+  const [ver, setVer] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [probando, setProbando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const guardar = async () => {
+    if (!accessToken.trim() || !publicKey.trim()) { setError("El Access Token (API) y la Public Key son obligatorios."); return; }
+    if (!email.includes("@")) { setError("Escribe el correo de la cuenta Mercado Pago."); return; }
+    setError(null);
+    setGuardando(true);
+    const r = await configurarMPPlataforma({ accessToken: accessToken.trim(), publicKey: publicKey.trim(), email: email.trim() });
+    setGuardando(false);
+    if (r.ok) {
+      toast("Cuenta Mercado Pago de la plataforma configurada.");
+      setAccessToken(""); setPublicKey(""); setEmail("");
+      await refetch();
+    } else {
+      setError(r.mensaje);
+    }
+  };
+
+  const probar = async () => {
+    setProbando(true);
+    const r = await probarMPPlataforma();
+    setProbando(false);
+    toast(r.mensaje + (r.cuenta ? " · " + r.cuenta : ""), r.ok ? "ok" : "warn");
+  };
+
+  return (
+    <div className="fade-swap max-w-2xl space-y-6">
+      <div>
+        <h2 className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight text-white">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-neon text-deep"><Settings2 size={18} /></span>
+          Cuenta Mercado Pago de la plataforma
+        </h2>
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-white/40">
+          Recibe las comisiones (3% app + 2% MP) y procesa las suscripciones de las comunidades
+        </p>
+      </div>
+
+      {mp.conectada ? (
+        <div className="rounded-xl border border-neon/40 bg-neon/[0.06] p-6">
+          <div className="flex items-center gap-2.5">
+            <CheckCheck size={18} className="text-neon" />
+            <p className="font-display text-lg font-bold text-white">Conectada · {mp.email}</p>
+            {mp.fecha && <span className="ml-auto font-mono text-[10px] uppercase text-white/40">desde {fmtFecha(mp.fecha)}</span>}
+          </div>
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+            <div className="rounded-lg border border-white/10 bg-deep px-4 py-3">
+              <p className="flex items-center gap-1.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-white/40"><KeyRound size={11} /> Access Token (API)</p>
+              <p className="mt-1 truncate font-mono text-[12px] text-white/80">{mp.accessToken ?? "••••••"}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-deep px-4 py-3">
+              <p className="font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-white/40">Public Key</p>
+              <p className="mt-1 truncate font-mono text-[12px] text-white/80">{mp.publicKey ?? "••••••"}</p>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2.5">
+            <Btn variant="neon" onClick={() => void probar()} disabled={probando}>
+              {probando ? <Spinner /> : <><PlugZap size={15} /> Probar conexión</>}
+            </Btn>
+            <button
+              onClick={async () => { await desvincularMPPlataforma(); toast("Cuenta desconectada.", "warn"); await refetch(); }}
+              className="rounded-lg border border-signal/50 px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-wide text-signal transition-colors hover:bg-signal hover:text-white"
+            >
+              Desconectar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-6">
+          <p className="flex items-start gap-2.5 text-[13px] leading-relaxed text-white/60">
+            <CreditCard size={16} className="mt-0.5 shrink-0 text-neon" />
+            Pega las credenciales de tu cuenta Mercado Pago de producción. El <strong className="text-white">Access Token</strong> (API) lo usa el servidor para cobrar;
+            la <strong className="text-white">Public Key</strong> identifica tu cuenta en los puntos de pago.
+          </p>
+          <Field label="Access Token (API)">
+            <div className="relative">
+              <input className="field pr-11 font-mono text-[12.5px]" type={ver ? "text" : "password"} value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder="APP_USR-…" />
+              <button type="button" onClick={() => setVer((v) => !v)} aria-label="Mostrar" className="absolute right-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-ink3 hover:text-pine">
+                {ver ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
+          </Field>
+          <Field label="Public Key">
+            <input className="field font-mono text-[12.5px]" type={ver ? "text" : "password"} value={publicKey} onChange={(e) => setPublicKey(e.target.value)} placeholder="APP_USR-…" />
+          </Field>
+          <Field label="Correo de la cuenta">
+            <input className="field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="pagos@comunapp.cl" />
+          </Field>
+          {error && <p className="rounded-lg border border-signal/50 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>}
+          <Btn variant="neon" size="lg" className="w-full" onClick={() => void guardar()} disabled={guardando}>
+            {guardando ? <Spinner /> : <><Link2 size={16} /> Conectar cuenta</>}
+          </Btn>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">¿Cómo se divide cada cobro?</p>
+        <p className="mt-2 text-[13px] leading-relaxed text-white/60">
+          A cada pago se le suma un <strong className="text-neon">5%</strong>: <strong className="text-white">3%</strong> de comisión de aplicación (ComunApp)
+          + <strong className="text-white">2%</strong> de Mercado Pago. El desglose se muestra siempre antes de cobrar.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /* ── tenants ── */
 function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Promise<void>; nueva: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -739,7 +1147,7 @@ function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Prom
                   <p className="text-[13.5px] font-semibold text-white">{c.nombre}</p>
                   <p className="font-mono text-[10px] uppercase tracking-wide text-white/35">{c.ciudad} · {c.unidades} unid. · id {c.id}</p>
                 </td>
-                <td className="px-5 py-4"><span className="rounded-md border border-neon/30 bg-neon/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wide text-neon">{PLAN_LABEL[c.plan]}</span></td>
+                <td className="px-5 py-4"><span className="rounded-md border border-neon/30 bg-neon/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wide text-neon">{planNombre(data.planes, c.plan)}</span></td>
                 <td className="tnum px-5 py-4 font-mono text-[13px] text-white/80">{c.usuarios}</td>
                 <td className="tnum px-5 py-4 font-mono text-[13px] text-white/80">{c.cobrosMes}</td>
                 <td className="tnum px-5 py-4 font-mono text-[13px] font-bold text-white">{fmtCLP(c.recaudado)}</td>

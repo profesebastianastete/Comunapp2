@@ -145,6 +145,32 @@ export const crearComunidadSaaS = (data: { nombre: string; direccion: string; ci
 export const toggleEstadoComunidad = (cid: string) =>
   post<{ estado: string }>(`/api/saas/comunidades/${cid}/toggle-estado`).then((r) => r.estado);
 
+/* ─────────────── planes dinámicos ─────────────── */
+export const crearPlan = (data: { nombre: string; precio: number }) =>
+  post<import("./store").Plan>("/api/saas/planes", { nombre: data.nombre, precio: data.precio });
+export const actualizarPlan = (planId: string, data: { nombre?: string; precio?: number; activa?: boolean }) =>
+  post(`/api/saas/planes/${planId}`, { nombre: data.nombre, precio: data.precio, activa: data.activa });
+export const eliminarPlan = (planId: string) =>
+  del<{ ok: boolean }>(`/api/saas/planes/${planId}`);
+
+/* ─────────────── cuenta Mercado Pago de la plataforma ─────────────── */
+export const configurarMPPlataforma = (cfg: { accessToken: string; publicKey: string; email: string }) =>
+  post<{ ok: boolean; cuenta?: string; mensaje: string }>("/api/saas/mp-plataforma/configurar", {
+    access_token: cfg.accessToken, public_key: cfg.publicKey, email: cfg.email,
+  });
+export const probarMPPlataforma = () =>
+  post<{ ok: boolean; cuenta?: string; siteId?: string; mensaje: string }>("/api/saas/mp-plataforma/probar");
+export const desvincularMPPlataforma = () =>
+  post<{ ok: boolean }>("/api/saas/mp-plataforma/desvincular");
+
+/* ─────────────── suscripciones (pago automático) ─────────────── */
+export const suscribirFacturaMP = (facturaId: string) =>
+  post<import("./store").CobroMP>(`/api/saas/facturas/${facturaId}/suscribir-mp`);
+export const crearSuscripcion = (cid: string, data: { unidad: string; email: string; monto: number }) =>
+  post<import("./store").Suscripcion>(`/api/comunidades/${cid}/suscripciones`, data);
+export const cancelarSuscripcion = (cid: string, suscripcionId: string) =>
+  post<{ ok: boolean }>(`/api/comunidades/${cid}/suscripciones/${suscripcionId}/cancelar`);
+
 /* ─────────────── gestión de usuarios (superadmin) ─────────────── */
 export const crearUsuarioSaaS = (data: { nombre: string; email: string; password: string; rolGlobal: boolean; membresias: { comunidadId: string; rol: string; unidad?: string }[] }) =>
   post<{ id: string }>("/api/saas/usuarios", {

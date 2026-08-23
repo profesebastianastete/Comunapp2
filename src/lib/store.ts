@@ -862,7 +862,7 @@ export async function listadoSaaS(): Promise<ListadoSaaS> {
 }
 
 /* ── súper admin · planes dinámicos ─────────────────────────── */
-export async function crearPlan( { nombre: string; precio: number }): Promise<Plan> {
+export async function crearPlan(data: { nombre: string; precio: number }): Promise<Plan> {
   if (EN_API) return api.crearPlan(data);
   await delay(500);
   const d = db();
@@ -875,7 +875,7 @@ export async function crearPlan( { nombre: string; precio: number }): Promise<Pl
   return p;
 }
 
-export async function actualizarPlan(planId: string,  { nombre?: string; precio?: number; activa?: boolean }) {
+export async function actualizarPlan(planId: string, data: { nombre?: string; precio?: number; activa?: boolean }) {
   if (EN_API) return api.actualizarPlan(planId, data);
   await delay(450);
   const p = db().planes.find((x) => x.id === planId);
@@ -960,7 +960,7 @@ export async function suscribirFacturaMP(facturaId: string): Promise<CobroMP> {
 /** Suscripción de vecino: el admin/comité crea el pago automático del mes para una unidad. */
 export async function crearSuscripcion(
   comunidadId: string,
-   { unidad: string; email: string; monto: number },
+  data: { unidad: string; email: string; monto: number },
 ): Promise<Suscripcion> {
   if (EN_API) return api.crearSuscripcion(comunidadId, data);
   await delay(1500);

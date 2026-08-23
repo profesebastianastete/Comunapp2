@@ -1,12 +1,13 @@
 import {
-  AlertTriangle, Building2, CheckCircle2, Coins, CreditCard, DoorOpen, ExternalLink,
-  FileSpreadsheet, KeyRound, Link2, PlugZap, PlusCircle, Search, ShieldCheck, UploadCloud, Users, Wallet,
+  AlertTriangle, Building2, CheckCircle2, Coins, Copy, CreditCard, DoorOpen, ExternalLink,
+  FileSpreadsheet, KeyRound, Link2, PlugZap, PlusCircle, RefreshCw, Search, ShieldCheck, UploadCloud, Users, Wallet, XCircle,
 } from "lucide-react";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import {
-  configurarMP, crearMovimiento, crearVecino, desvincularMP, fmtCLP, fmtFecha, fmtMes, generarMes,
-  importarCSV, marcarSalida, periodoActual, probarMP, registrarAcceso, registrarPagoVecino, ROL_LABEL,
-  type DatosComunidad, type FilaCSV, type Sesion,
+  calcularComision, cancelarSuscripcion, configurarMP, crearMovimiento, crearSuscripcion, crearVecino,
+  desvincularMP, fmtCLP, fmtFecha, fmtMes, generarMes, importarCSV, marcarSalida, periodoActual,
+  probarMP, registrarAcceso, registrarPagoVecino, ROL_LABEL,
+  type DatosComunidad, type FilaCSV, type Sesion, type Suscripcion,
 } from "../lib/store";
 import { Btn, Empty, EstadoTag, Field, Modal, RolTag, Spinner, StatCard, toast } from "./ui";
 
@@ -583,6 +584,157 @@ function ImportarComunidad({ datos, recargar }: { datos: DatosComunidad; recarga
           </div>
         )}
       </Modal>
+    </div>
+  );
+}
+
+/* ════════ PAGOS AUTOMÁTICOS (suscripciones de vecinos) ════════ */
+export function ModuloSuscripciones({ datos, recargar }: { datos: DatosComunidad; recargar: () => Promise<void> }) {
+  const mp = datos.comunidad.vinculacion;
+  const [form, setForm] = useState({ unidad: "", email: "", monto: 55000 });
+  const [creando, setCreando] = useState(false);
+  const [link, setLink] = useState<Suscripcion | null>(null);
+  const [cancelando, setCancelando] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const crear = async () => {
+    if (!form.unidad.trim() || !form.email.includes("@")) { setError("Completa la unidad y un correo válido."); return; }
+    if (form.monto <= 0) { setError("El monto debe ser mayor a 0."); return; }
+    setError(null);
+    setCreando(true);
+    try {
+      const s = await crearSuscripcion(datos.comunidad.id, { unidad: form.unidad.trim().toUpperCase(), email: form.email.trim(), monto: form.monto });
+      setLink(s);
+      setForm({ unidad: "", email: "", monto: 55000 });
+      await recargar();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo crear la suscripción.");
+    }
+    setCreando(false);
+  };
+
+  const cancelar = async (s: Suscripcion) => {
+    setCancelando(s.id);
+    await cancelarSuscripcion(datos.comunidad.id, s.id);
+    toast("Suscripción de " + s.unidad + " cancelada.", "warn");
+    setCancelando(null);
+    await recargar();
+  };
+
+  const com = form.monto > 0 ? calcularComision(form.monto) : null;
+
+  return (
+    <div className="fade-swap space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-pine/10 text-pine"><RefreshCw size={22} /></span>
+          <div>
+            <h3 className="font-display text-[22px] font-bold tracking-tight text-ink">Pagos automáticos</h3>
+            <p className="mt-1 max-w-xl text-[13.5px] text-ink2">
+              Crea una suscripción de Mercado Pago para que un propietario o arrendatario autorice el cargo de sus
+              pagos del mes con <strong className="text-ink">tarjeta de crédito</strong>. Después se cobra solo, cada mes.
+            </p>
+          </div>
+        </div>
+        {mp.conectada
+          ? <span className="inline-flex items-center gap-2 rounded-full bg-pine px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-neon"><CheckCircle2 size={13} /> Mercado Pago conectado</span>
+          : <span className="inline-flex items-center gap-2 rounded-full bg-amber/15 px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-[#8a6114]"><AlertTriangle size={13} /> Configura Mercado Pago primero</span>}
+      </div>
+
+      {/* crear suscripción */}
+      <div className="rounded-2xl border border-line bg-card p-6 shadow-soft">
+        <h4 className="flex items-center gap-2 font-display text-lg font-bold text-ink"><PlusCircle size={19} className="text-pine2" /> Nueva suscripción</h4>
+        <div className="mt-4 grid gap-4 sm:grid-cols-[130px_1fr_150px_auto]">
+          <Field label="Unidad"><input className="field" value={form.unidad} onChange={(e) => setForm({ ...form, unidad: e.target.value.toUpperCase() })} placeholder="P-14" /></Field>
+          <Field label="Correo del vecino"><input className="field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="vecino@correo.cl" /></Field>
+          <Field label="Monto mensual (CLP)"><input className="field" type="number" min={0} step={500} value={form.monto || ""} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} /></Field>
+          <div className="flex items-end">
+            <Btn variant="neon" onClick={() => void crear()} disabled={creando || !mp.conectada}>
+              {creando ? <Spinner /> : <><RefreshCw size={15} /> Crear</>}
+            </Btn>
+          </div>
+        </div>
+        {com && mp.conectada && (
+          <p className="mt-3 rounded-lg border border-line bg-paper px-4 py-2.5 font-mono text-[11.5px] text-ink2">
+            Cargo mensual: <strong className="text-ink">{fmtCLP(com.base)}</strong> + 3% app ({fmtCLP(com.comisionApp)}) + 2% MP ({fmtCLP(com.comisionMP)}) = <strong className="text-pine">{fmtCLP(com.total)}</strong>
+          </p>
+        )}
+        {error && <p className="mt-3 rounded-lg border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-[#a03526]">{error}</p>}
+      </div>
+
+      {/* listado */}
+      <div className="rounded-2xl border border-line bg-card shadow-soft">
+        <div className="border-b border-line px-5 py-3.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.18em] text-ink3">Suscripciones activas y pendientes</div>
+        {datos.suscripciones.length === 0 ? (
+          <div className="p-6"><Empty title="Sin suscripciones" sub="Crea la primera para que un vecino pague el mes automáticamente." /></div>
+        ) : (
+          <ul className="divide-y divide-line/70">
+            {datos.suscripciones.map((s) => {
+              const comS = calcularComision(s.monto);
+              return (
+                <li key={s.id} className="flex flex-wrap items-center gap-3 px-5 py-4 transition-colors hover:bg-paper/70">
+                  <span className={"grid h-10 w-10 place-items-center rounded-xl " + (s.estado === "AUTORIZADA" ? "bg-pine/10 text-pine" : s.estado === "PENDIENTE" ? "bg-amber/15 text-[#8a6114]" : "bg-line/40 text-ink3")}>
+                    <RefreshCw size={17} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13.5px] font-semibold text-ink">{s.unidad} · <span className="font-mono text-[11.5px] font-normal text-ink3">{s.email}</span></p>
+                    <p className="font-mono text-[10.5px] uppercase tracking-wide text-ink3">{s.frecuencia} · creada {fmtFecha(s.creada)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="tnum font-mono text-[14px] font-bold text-ink">{fmtCLP(comS.total)}<span className="text-[10.5px] font-normal text-ink3">/mes</span></p>
+                    <EstadoTag estado={s.estado === "AUTORIZADA" ? "PAGADO" : s.estado === "PENDIENTE" ? "PENDIENTE" : "VENCIDO"} />
+                  </div>
+                  <div className="flex gap-1.5">
+                    {s.estado === "PENDIENTE" && s.linkAutorizacion && (
+                      <button onClick={() => setLink(s)} className="inline-flex items-center gap-1.5 rounded-lg bg-pine px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition-colors hover:bg-pine2" title="Ver enlace de autorización">
+                        <Link2 size={12} /> Autorizar
+                      </button>
+                    )}
+                    {s.estado !== "CANCELADA" && (
+                      <button disabled={cancelando === s.id} onClick={() => void cancelar(s)} className="grid h-8 w-8 place-items-center rounded-lg border border-line text-ink3 transition-colors hover:border-signal hover:text-signal disabled:opacity-50" title="Cancelar suscripción">
+                        {cancelando === s.id ? <Spinner className="h-3.5 w-3.5" /> : <XCircle size={14} />}
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {/* enlace de autorización */}
+      {link && (
+        <Modal open onClose={() => setLink(null)} title={"Autorizar pago automático · " + link.unidad} wide>
+          <div className="space-y-4">
+            <p className="rounded-xl border border-pine/30 bg-pine/5 px-4 py-3 text-[13px] leading-relaxed text-ink2">
+              Envía este enlace a <strong className="text-ink">{link.email}</strong>. Al abrirlo, Mercado Pago le pedirá autorizar el cargo
+              automático con su <strong className="text-ink">tarjeta de crédito</strong>. Desde entonces, sus pagos del mes se cobran solos.
+            </p>
+            <div className="flex items-center justify-between rounded-xl border border-line bg-paper px-5 py-4">
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ink3">Cargo mensual</p>
+                <p className="tnum mt-1 font-display text-3xl font-bold text-pine">{fmtCLP(calcularComision(link.monto).total)}</p>
+              </div>
+              <span className="rounded-full bg-amber/15 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-[#8a6114]">Pendiente de autorización</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border border-line bg-card px-3.5 py-2.5">
+              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink2">{link.linkAutorizacion}</span>
+              <button onClick={() => { void navigator.clipboard.writeText(link.linkAutorizacion ?? ""); toast("Enlace copiado."); }} className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line text-ink2 transition-colors hover:border-pine hover:text-pine" title="Copiar">
+                <Copy size={13} />
+              </button>
+              <a href={link.linkAutorizacion} target="_blank" rel="noreferrer" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line text-ink2 transition-colors hover:border-pine hover:text-pine" title="Abrir">
+                <ExternalLink size={13} />
+              </a>
+            </div>
+            <div className="flex justify-end border-t border-line pt-4">
+              <Btn variant="neon" onClick={() => { void navigator.clipboard.writeText(link.linkAutorizacion ?? ""); toast("Enlace de autorización copiado."); }}>
+                <Copy size={15} /> Copiar enlace
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
