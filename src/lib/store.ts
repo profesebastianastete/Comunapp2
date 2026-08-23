@@ -46,11 +46,33 @@ export interface ResultadoMP {
 export interface CobroMP {
   id: string;               // id de la preferencia MP
   puntoDePago: string;      // init_point: URL donde el vecino paga
-  monto: number;
+  monto: number;            // monto BASE (antes de comisiones)
+  total: number;            // monto que realmente se cobra (base + 5% de comisiones)
+  comisionApp: number;      // 3% comisión ComunApp
+  comisionMP: number;       // 2% comisión Mercado Pago
   concepto: string;
   unidad?: string;
   creado: string;
   modo?: "sandbox" | "produccion";
+}
+
+/* ── Comisiones de Mercado Pago ────────────────────────────────
+   A cada cobro se le suma un 5% de comisiones:
+     · 3% comisión de aplicación (ComunApp)
+     · 2% comisión de Mercado Pago
+   El total (base + 5%) es lo que se cobra al pagador. */
+export const COMISION_APP = 0.03;
+export const COMISION_MP = 0.02;
+export function calcularComision(monto: number) {
+  const comisionApp = Math.round(monto * COMISION_APP);
+  const comisionMP = Math.round(monto * COMISION_MP);
+  return {
+    base: monto,
+    comisionApp,
+    comisionMP,
+    comisionTotal: comisionApp + comisionMP,
+    total: monto + comisionApp + comisionMP,
+  };
 }
 export interface Comunidad {
   id: string; nombre: string; direccion: string; ciudad: string;
@@ -588,11 +610,15 @@ export async function generarCobroMP(
   }
   const esSandbox = c.vinculacion.accessToken.includes("TEST");
   const prefId = "PREF-" + uid().slice(0, 10).toUpperCase();
+  const com = calcularComision(data.monto);
   const cobro: CobroMP = {
     id: prefId,
     puntoDePago:
       (esSandbox ? "https://sandbox.mercadopago.cl/checkout/v1/redirect?pref_id=" : "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=") + prefId,
     monto: data.monto,
+    total: com.total,
+    comisionApp: com.comisionApp,
+    comisionMP: com.comisionMP,
     concepto: data.concepto,
     unidad: data.unidad,
     creado: ahoraISO(),
@@ -782,6 +808,71 @@ export async function toggleEstadoComunidad(comunidadId: string) {
   evento("Estado de " + c.nombre + " → " + c.estado);
   guardar();
   return c.estado;
+}
+
+/* ── gestión de usuarios (superadmin) ───────────────────────── */
+export async function setPasswordUsuario(usuarioId: string, nueva: string) {
+  if (EN_API) return api.setPasswordUsuario(usuarioId, nueva);
+  await delay(650);
+  const u = db().usuarios.find((x) => x.id === usuarioId);
+  if (!u) throw new Error("Usuario no encontrado.");
+  if (nueva.length < 6) throw new Error("La contraseña debe tener al menos 6 caracteres.");
+  u.password = nueva;
+  evento("Contraseña redefinida · " + u.email);
+  guardar();
+}
+
+export async function toggleUsuarioActivo(usuarioId: string) {
+  if (EN_API) return api.toggleUsuarioActivo(usuarioId);
+  await delay(400);
+  const u = db().usuarios.find((x) => x.id === usuarioId);
+  if (!u) throw new Error("Usuario no encontrado.");
+  u.activo = !u.activo;
+  evento((u.activo ? "Cuenta activada · " : "Cuenta desactivada · ") + u.email);
+  guardar();
+  return u.activo;
+}
+
+export async function crearUsuarioSaaS(data: { nombre: string; email: string; password: string; rolGlobal: boolean; membresias: Membresia[] }) {
+  if (EN_API) return api.crearUsuarioSaaS(data);
+  await delay(700);
+  const d = db();
+  if (d.usuarios.some((u) => u.email.toLowerCase() === data.email.toLowerCase()))
+    throw new Error("Ya existe una cuenta con ese correo.");
+  d.usuarios.push({
+    id: uid(), nombre: data.nombre, email: data.email, password: data.password,
+    activo: true, creado: ahoraISO(),
+    rolGlobal: data.rolGlobal ? "SUPERADMIN" : null,
+    membresias: data.rolGlobal ? [] : data.membresias,
+  });
+  evento("Usuario creado por superadmin: " + data.nombre);
+  guardar();
+}
+
+/* ── cobrar factura de comunidad vía Mercado Pago ───────────── */
+export interface CobroFacturaMP {
+  id: string; puntoDePago: string; monto: number; total: number;
+  comisionApp: number; comisionMP: number; comunidad: string; creado: string;
+  modo?: "sandbox" | "produccion";
+}
+export async function cobrarFacturaMP(facturaId: string): Promise<CobroFacturaMP> {
+  if (EN_API) return api.cobrarFacturaMP(facturaId);
+  await delay(1500);
+  const d = db();
+  const f = d.facturas.find((x) => x.id === facturaId);
+  if (!f) throw new Error("Factura no encontrada.");
+  const comu = d.comunidades.find((x) => x.id === f.comunidadId);
+  const com = calcularComision(f.monto);
+  const prefId = "PREF-" + uid().slice(0, 10).toUpperCase();
+  evento("Punto de pago MP para factura de " + (comu?.nombre ?? f.comunidadId) + " · " + fmtCLP(com.total));
+  guardar();
+  return {
+    id: prefId,
+    puntoDePago: "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=" + prefId,
+    monto: f.monto, total: com.total,
+    comisionApp: com.comisionApp, comisionMP: com.comisionMP,
+    comunidad: comu?.nombre ?? "Comunidad", creado: ahoraISO(), modo: "produccion",
+  };
 }
 
 /* ── facturación SaaS: cobros A las comunidades ─────────────── */

@@ -91,9 +91,10 @@ export const probarMP = (cid: string) =>
 export const desvincularMP = (cid: string) =>
   post<{ ok: boolean }>(`/api/comunidades/${cid}/mp/desvincular`);
 
-/** Genera un cobro real vía API de Mercado Pago (Checkout Pro) y devuelve el punto de pago. */
+/** Genera un cobro real vía API de Mercado Pago (Checkout Pro) y devuelve el punto de pago.
+ *  El backend aplica la comisión total del 5% (3% app + 2% MP) sobre el monto. */
 export const generarCobroMP = (cid: string, data: { monto: number; concepto: string; unidad?: string; emailPagador?: string }) =>
-  post<{ id: string; puntoDePago: string; monto: number; concepto: string; unidad?: string; creado: string; modo?: "sandbox" | "produccion" }>(
+  post<{ id: string; puntoDePago: string; monto: number; total: number; comisionApp: number; comisionMP: number; concepto: string; unidad?: string; creado: string; modo?: "sandbox" | "produccion" }>(
     `/api/comunidades/${cid}/mp/cobros`,
     { monto: data.monto, concepto: data.concepto, unidad: data.unidad, email_pagador: data.emailPagador },
   );
@@ -143,3 +144,25 @@ export const crearComunidadSaaS = (data: { nombre: string; direccion: string; ci
   });
 export const toggleEstadoComunidad = (cid: string) =>
   post<{ estado: string }>(`/api/saas/comunidades/${cid}/toggle-estado`).then((r) => r.estado);
+
+/* ─────────────── gestión de usuarios (superadmin) ─────────────── */
+export const crearUsuarioSaaS = (data: { nombre: string; email: string; password: string; rolGlobal: boolean; membresias: { comunidadId: string; rol: string; unidad?: string }[] }) =>
+  post<{ id: string }>("/api/saas/usuarios", {
+    nombre: data.nombre, email: data.email, password: data.password,
+    rol_global: data.rolGlobal ? "SUPERADMIN" : null,
+    membresias: data.rolGlobal ? [] : data.membresias,
+  });
+
+/** El superadmin define una nueva contraseña para cualquier usuario (sin pedir la actual). */
+export const setPasswordUsuario = (usuarioId: string, nueva: string) =>
+  post<{ ok: boolean }>(`/api/saas/usuarios/${usuarioId}/password`, { nueva });
+
+export const toggleUsuarioActivo = (usuarioId: string) =>
+  post<{ activo: boolean }>(`/api/saas/usuarios/${usuarioId}/toggle-activo`).then((r) => r.activo);
+
+/* ─────────────── cobrar factura de comunidad vía Mercado Pago ─────────────── */
+/** Crea un punto de pago de Mercado Pago por la factura, con la comisión del 5% incluida. */
+export const cobrarFacturaMP = (facturaId: string) =>
+  post<{ id: string; puntoDePago: string; monto: number; total: number; comisionApp: number; comisionMP: number; comunidad: string; creado: string; modo?: "sandbox" | "produccion" }>(
+    `/api/saas/facturas/${facturaId}/cobrar-mp`,
+  );

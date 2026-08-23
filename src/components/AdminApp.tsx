@@ -1,15 +1,17 @@
 import {
-  Activity, Building2, CheckCheck, Copy, CreditCard, ExternalLink, KeyRound, PlugZap, PlusCircle, Power, TrendingUp, Users,
+  Activity, Building2, CheckCheck, Copy, CreditCard, ExternalLink, Eye, EyeOff, KeyRound,
+  Pencil, PlugZap, PlusCircle, Power, TrendingUp, UserCog, UserPlus, Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  crearComunidadSaaS, fmtCLP, fmtFecha, fmtMes, generarCobroMP, generarFacturasMes, listadoSaaS,
-  marcarFacturaPagada, PLAN_LABEL, toggleEstadoComunidad, usuarioActual,
-  type CobroMP, type PlanId, type Sesion,
+  calcularComision, cobrarFacturaMP, crearComunidadSaaS, crearUsuarioSaaS, fmtCLP, fmtFecha, fmtMes,
+  generarCobroMP, generarFacturasMes, listadoSaaS, marcarFacturaPagada, PLAN_LABEL, ROL_LABEL,
+  setPasswordUsuario, toggleEstadoComunidad, toggleUsuarioActivo, usuarioActual,
+  type CobroFacturaMP, type CobroMP, type PlanId, type RolCondo, type Sesion,
 } from "../lib/store";
 import { Btn, CountUp, Empty, EstadoTag, Field, Modal, ModalCambiarPassword, Spinner, toast } from "./ui";
 
-type Tab = "metricas" | "comunidades" | "cobrosmp" | "facturacion" | "actividad";
+type Tab = "metricas" | "comunidades" | "usuarios" | "cobrosmp" | "facturacion" | "actividad";
 
 interface SaaSData {
   comunidades: {
@@ -23,7 +25,11 @@ interface SaaSData {
       accessToken?: string;
     };
   }[];
-  usuarios: { id: string; nombre: string; email: string; activo: boolean }[];
+  usuarios: {
+    id: string; nombre: string; email: string; activo: boolean;
+    rolGlobal: "SUPERADMIN" | null;
+    membresias: { comunidadId: string; rol: RolCondo; unidad?: string }[];
+  }[];
   facturas: { id: string; comunidadId: string; periodo: string; plan: string; monto: number; estado: string; fecha: string }[];
   seriePagos: { dia: string; monto: number; pagos: number }[];
   eventos: { id: string; fecha: string; texto: string }[];
@@ -52,6 +58,7 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
   const tabs: { id: Tab; label: string; icon: typeof Activity }[] = [
     { id: "metricas", label: "Métricas", icon: Activity },
     { id: "comunidades", label: "Tenants", icon: Building2 },
+    { id: "usuarios", label: "Usuarios", icon: UserCog },
     { id: "cobrosmp", label: "Cobros MP", icon: PlugZap },
     { id: "facturacion", label: "Facturación", icon: CreditCard },
     { id: "actividad", label: "Eventos", icon: TrendingUp },
@@ -112,6 +119,8 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
             <Metricas data={data} kpis={kpis} />
           ) : tab === "comunidades" ? (
             <Tenants data={data} refetch={refetch} nueva={() => setModalNueva(true)} />
+          ) : tab === "usuarios" ? (
+            <UsuariosSaaS data={data} comunidades={data.comunidades} refetch={refetch} />
           ) : tab === "cobrosmp" ? (
             <CobrosMP data={data} refetch={refetch} />
           ) : tab === "facturacion" ? (
@@ -309,6 +318,14 @@ function CobrosMP({ data, refetch }: { data: SaaSData; refetch: () => Promise<vo
                   <input className="field" type="email" value={form.emailPagador} onChange={(e) => setForm({ ...form, emailPagador: e.target.value })} placeholder="vecino@correo.cl" />
                 </Field>
               </div>
+              {form.monto > 0 && (
+                <DesgloseComision
+                  base={form.monto}
+                  comisionApp={calcularComision(form.monto).comisionApp}
+                  comisionMP={calcularComision(form.monto).comisionMP}
+                  total={calcularComision(form.monto).total}
+                />
+              )}
               {error && <p className="mt-4 rounded-lg border border-signal/50 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>}
               <Btn variant="neon" size="lg" className="mt-5 w-full" onClick={() => void generar()} disabled={busy}>
                 {busy ? <Spinner /> : <><PlugZap size={16} /> Generar cobro con Mercado Pago</>}
@@ -320,8 +337,9 @@ function CobrosMP({ data, refetch }: { data: SaaSData; refetch: () => Promise<vo
                 <p className="flex items-center gap-2 font-mono text-[10.5px] font-bold uppercase tracking-[0.2em] text-neon">
                   <CheckCircle2MP /> Punto de pago listo · {ultimo.modo ?? "sandbox"}
                 </p>
-                <p className="tnum mt-3 font-display text-3xl font-bold text-white">{fmtCLP(ultimo.monto)}</p>
+                <p className="tnum mt-3 font-display text-3xl font-bold text-white">{fmtCLP(ultimo.total)}</p>
                 <p className="mt-0.5 text-[13px] text-white/60">{ultimo.concepto}{ultimo.unidad ? " · " + ultimo.unidad : ""}</p>
+                <DesgloseComision base={ultimo.monto} comisionApp={ultimo.comisionApp} comisionMP={ultimo.comisionMP} total={ultimo.total} />
                 <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/15 bg-deep px-3.5 py-2.5">
                   <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/70">{ultimo.puntoDePago}</span>
                   <button onClick={() => void copiar(ultimo.puntoDePago, "Punto de pago")} className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-white/20 text-white/70 transition-colors hover:border-neon hover:text-neon" title="Copiar enlace">
@@ -394,6 +412,295 @@ function CheckCircle2MP() {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" />
     </svg>
+  );
+}
+
+/* Desglose de la comisión del 5% (3% app + 2% MP) que se suma al cobro */
+function DesgloseComision({ base, comisionApp, comisionMP, total }: {
+  base: number; comisionApp: number; comisionMP: number; total: number;
+}) {
+  const fila = (l: string, v: number, cls = "text-white/70") => (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-white/45">{l}</span>
+      <span className={"tnum font-mono font-semibold " + cls}>{v === 0 ? "—" : fmtCLP(v)}</span>
+    </div>
+  );
+  return (
+    <div className="mt-4 space-y-1.5 rounded-lg border border-white/10 bg-deep/60 px-4 py-3 text-[12.5px]">
+      {fila("Monto base", base, "text-white")}
+      {fila("Comisión ComunApp (3%)", comisionApp, "text-neon")}
+      {fila("Comisión Mercado Pago (2%)", comisionMP, "text-neon")}
+      <div className="my-1.5 border-t border-dashed border-white/15" />
+      <div className="flex items-center justify-between gap-3">
+        <span className="font-bold text-white">Total a cobrar (5% incl.)</span>
+        <span className="tnum font-mono text-[15px] font-bold text-neon">{fmtCLP(total)}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ── usuarios (gestión de accesos y contraseñas · superadmin) ── */
+function UsuariosSaaS({ data, comunidades, refetch }: {
+  data: SaaSData; comunidades: SaaSData["comunidades"]; refetch: () => Promise<void>;
+}) {
+  const [q, setQ] = useState("");
+  const [passDe, setPassDe] = useState<SaaSData["usuarios"][number] | null>(null);
+  const [nuevo, setNuevo] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const nombreComu = (id: string) => comunidades.find((c) => c.id === id)?.nombre ?? id.slice(0, 6);
+
+  const filtrados = data.usuarios.filter((u) =>
+    (u.nombre + " " + u.email).toLowerCase().includes(q.toLowerCase()));
+
+  const toggle = async (u: SaaSData["usuarios"][number]) => {
+    setBusy(u.id);
+    const activo = await toggleUsuarioActivo(u.id);
+    await refetch();
+    setBusy(null);
+    toast(u.nombre + (activo ? " activado." : " suspendido."), activo ? "ok" : "warn");
+  };
+
+  return (
+    <div className="fade-swap space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <div>
+          <h2 className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight text-white">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-neon text-deep"><UserCog size={18} /></span>
+            Usuarios de la plataforma
+          </h2>
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-white/40">
+            {data.usuarios.length} cuentas · redefine contraseñas y activa o suspende accesos
+          </p>
+        </div>
+        <div className="ml-auto flex items-center gap-2.5">
+          <div className="relative">
+            <input
+              className="field h-10! w-56! border-white/15 bg-white/[0.05] pl-9 text-[13px] text-white placeholder:text-white/30"
+              placeholder="Buscar por nombre o correo…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+          </div>
+          <Btn variant="neon" onClick={() => setNuevo(true)}><UserPlus size={15} /> Nuevo usuario</Btn>
+        </div>
+      </div>
+
+      <div className="dark-scroll overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03]">
+        <table className="w-full min-w-[760px] border-collapse text-left">
+          <thead>
+            <tr className="border-b border-white/10 font-mono text-[9.5px] uppercase tracking-[0.18em] text-white/40">
+              <th className="px-5 py-3.5">Usuario</th>
+              <th className="px-5 py-3.5">Roles</th>
+              <th className="px-5 py-3.5">Estado</th>
+              <th className="px-5 py-3.5 text-right">Contraseña / acceso</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtrados.map((u) => (
+              <tr key={u.id} className="border-b border-white/5 transition-colors last:border-0 hover:bg-white/[0.04]">
+                <td className="px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-neon/15 font-display text-[13px] font-bold text-neon">
+                      {u.nombre.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+                    </span>
+                    <div className="min-w-0">
+                      <p className={"truncate text-[13.5px] font-semibold " + (u.activo ? "text-white" : "text-white/40 line-through")}>{u.nombre}</p>
+                      <p className="truncate font-mono text-[10.5px] text-white/40">{u.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-5 py-4">
+                  <div className="flex flex-wrap gap-1.5">
+                    {u.rolGlobal === "SUPERADMIN" && (
+                      <span className="rounded-full bg-neon/20 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-neon">Superadmin</span>
+                    )}
+                    {u.membresias.map((m, i) => (
+                      <span key={i} className="rounded-full bg-white/10 px-2.5 py-1 font-mono text-[9px] font-bold uppercase tracking-wide text-white/70">
+                        {ROL_LABEL[m.rol]} · {nombreComu(m.comunidadId)}{m.unidad ? " · " + m.unidad : ""}
+                      </span>
+                    ))}
+                    {u.rolGlobal !== "SUPERADMIN" && u.membresias.length === 0 && (
+                      <span className="font-mono text-[10px] text-white/30">sin rol asignado</span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-5 py-4"><EstadoTag estado={u.activo ? "ACTIVA" : "SUSPENDIDA"} /></td>
+                <td className="px-5 py-4">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => setPassDe(u)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-neon/50 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-neon transition-colors hover:bg-neon hover:text-deep"
+                    >
+                      <KeyRound size={12} /> Contraseña
+                    </button>
+                    <button
+                      disabled={busy === u.id}
+                      onClick={() => void toggle(u)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white/70 transition-colors hover:border-signal hover:text-signal disabled:opacity-50"
+                    >
+                      {busy === u.id ? <Spinner className="h-3 w-3" /> : <Power size={12} />}
+                      {u.activo ? "Suspender" : "Activar"}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {filtrados.length === 0 && (
+              <tr><td colSpan={4} className="px-5 py-10 text-center font-mono text-[12px] text-white/40">Sin resultados para “{q}”.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {passDe && (
+        <ModalSetPassword
+          usuario={passDe}
+          onClose={() => setPassDe(null)}
+          onSaved={async () => { setPassDe(null); await refetch(); }}
+        />
+      )}
+      {nuevo && (
+        <ModalNuevoUsuario
+          comunidades={comunidades}
+          onClose={() => setNuevo(false)}
+          onSaved={async () => { setNuevo(false); await refetch(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+function ModalSetPassword({ usuario, onClose, onSaved }: {
+  usuario: SaaSData["usuarios"][number]; onClose: () => void; onSaved: () => Promise<void>;
+}) {
+  const [nueva, setNueva] = useState("");
+  const [confirmar, setConfirmar] = useState("");
+  const [ver, setVer] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const guardar = async () => {
+    if (nueva.length < 6) return setError("La contraseña debe tener al menos 6 caracteres.");
+    if (nueva !== confirmar) return setError("La confirmación no coincide.");
+    setError(null);
+    setBusy(true);
+    try {
+      await setPasswordUsuario(usuario.id, nueva);
+      toast("Contraseña de " + usuario.nombre + " actualizada.");
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo actualizar.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Modal open onClose={onClose} title={"Contraseña · " + usuario.nombre}>
+      <div className="space-y-4">
+        <p className="rounded-xl border border-line bg-paper px-4 py-3 text-[13px] leading-relaxed text-ink2">
+          Estás redefiniendo la contraseña de <strong className="text-ink">{usuario.email}</strong>.
+          La próxima vez que entre deberá usar la nueva.
+        </p>
+        <Field label="Nueva contraseña" hint="mín. 6 caracteres">
+          <div className="relative">
+            <input className="field pr-11" type={ver ? "text" : "password"} value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="••••••••" />
+            <button type="button" onClick={() => setVer((v) => !v)} aria-label="Mostrar contraseña"
+              className="absolute right-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-ink3 transition-all hover:bg-paper hover:text-pine">
+              {ver ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </Field>
+        <Field label="Confirmar nueva contraseña">
+          <input className="field" type={ver ? "text" : "password"} value={confirmar} onChange={(e) => setConfirmar(e.target.value)} placeholder="••••••••" />
+        </Field>
+        {error && <p className="rounded-xl border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>}
+        <div className="flex justify-end gap-2.5 border-t border-line pt-4">
+          <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+          <Btn variant="neon" onClick={() => void guardar()} disabled={busy}>
+            {busy ? <Spinner /> : <><CheckCheck size={15} /> Guardar contraseña</>}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ModalNuevoUsuario({ comunidades, onClose, onSaved }: {
+  comunidades: SaaSData["comunidades"]; onClose: () => void; onSaved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({ nombre: "", email: "", password: "", esSuper: false, comunidadId: comunidades[0]?.id ?? "", rol: "ADMIN" as RolCondo, unidad: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const crear = async () => {
+    if (!form.nombre.trim() || !form.email.includes("@")) return setError("Completa nombre y un correo válido.");
+    if (form.password.length < 6) return setError("La contraseña debe tener al menos 6 caracteres.");
+    setError(null);
+    setBusy(true);
+    try {
+      await crearUsuarioSaaS({
+        nombre: form.nombre.trim(), email: form.email.trim(), password: form.password,
+        rolGlobal: form.esSuper,
+        membresias: form.esSuper ? [] : [{ comunidadId: form.comunidadId, rol: form.rol, unidad: form.unidad.trim() || undefined }],
+      });
+      toast("Usuario creado: " + form.nombre + " ya puede iniciar sesión.");
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo crear.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Nuevo usuario" wide>
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Nombre completo"><input className="field" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: Tomás Vidal" /></Field>
+          <Field label="Correo electrónico"><input className="field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="correo@dominio.cl" /></Field>
+        </div>
+        <Field label="Contraseña inicial" hint="mín. 6 caracteres">
+          <input className="field" type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="ej: bienvenido123" />
+        </Field>
+        <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3">
+          <input type="checkbox" checked={form.esSuper} onChange={(e) => setForm({ ...form, esSuper: e.target.checked })} className="h-4 w-4 accent-pine" />
+          <span className="text-[13px] text-ink2">Es <strong className="text-ink">Superadmin</strong> (acceso al panel interno, sin comunidad asignada)</span>
+        </label>
+        {!form.esSuper && (
+          <div className="grid gap-4 sm:grid-cols-[1fr_150px_120px]">
+            <Field label="Comunidad">
+              <select className="field" value={form.comunidadId} onChange={(e) => setForm({ ...form, comunidadId: e.target.value })}>
+                {comunidades.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            </Field>
+            <Field label="Rol">
+              <select className="field" value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as RolCondo })}>
+                {(["ADMIN", "COMITE", "PROPIETARIO", "ARRENDATARIO"] as RolCondo[]).map((r) => <option key={r} value={r}>{ROL_LABEL[r]}</option>)}
+              </select>
+            </Field>
+            <Field label="Unidad" hint="opcional">
+              <input className="field" value={form.unidad} onChange={(e) => setForm({ ...form, unidad: e.target.value.toUpperCase() })} placeholder="P-14" />
+            </Field>
+          </div>
+        )}
+        {error && <p className="rounded-xl border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>}
+        <div className="flex justify-end gap-2.5 border-t border-line pt-4">
+          <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+          <Btn variant="neon" onClick={() => void crear()} disabled={busy}>
+            {busy ? <Spinner /> : <><UserPlus size={15} /> Crear usuario</>}
+          </Btn>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -489,6 +796,7 @@ function Facturacion({ data, kpis, refetch }: { data: SaaSData; kpis: { mrr: num
   const [mes, setMes] = useState(periodos[0]);
   const [generando, setGenerando] = useState(false);
   const [cobrando, setCobrando] = useState<string | null>(null);
+  const [puntoMP, setPuntoMP] = useState<CobroFacturaMP | null>(null);
 
   const generar = async () => {
     setGenerando(true);
@@ -503,12 +811,22 @@ function Facturacion({ data, kpis, refetch }: { data: SaaSData; kpis: { mrr: num
     );
   };
 
-  const cobrar = async (facturaId: string, nombre: string) => {
+  const cobrarMP = async (facturaId: string) => {
     setCobrando(facturaId);
+    try {
+      const r = await cobrarFacturaMP(facturaId);
+      setPuntoMP(r);
+      toast("Punto de pago creado para " + r.comunidad + " (con 5% de comisiones).");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "No se pudo crear el cobro.", "warn");
+    }
+    setCobrando(null);
+  };
+
+  const marcarPagada = async (facturaId: string, nombre: string) => {
     await marcarFacturaPagada(facturaId);
     await refetch();
-    setCobrando(null);
-    toast("Factura cobrada a " + nombre + ".");
+    toast("Factura de " + nombre + " marcada como pagada.");
   };
 
   return (
@@ -581,17 +899,26 @@ function Facturacion({ data, kpis, refetch }: { data: SaaSData; kpis: { mrr: num
                   <td className="px-5 py-3.5 font-mono text-[12px] text-white/60">{fmtMes(f.periodo)}</td>
                   <td className="tnum px-5 py-3.5 font-mono text-[13px] font-bold text-white">{f.monto === 0 ? "Gratis" : fmtCLP(f.monto)}</td>
                   <td className="px-5 py-3.5"><EstadoTag estado={f.estado === "PAGADA" ? "PAGADO" : f.estado === "PENDIENTE" ? "PENDIENTE" : "VENCIDO"} /></td>
-                  <td className="px-5 py-3.5 text-right">
+                  <td className="px-5 py-3.5">
                     {pendiente ? (
-                      <button
-                        disabled={cobrando === f.id}
-                        onClick={() => void cobrar(f.id, tenant?.nombre ?? "la comunidad")}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-neon/50 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-neon transition-colors hover:bg-neon hover:text-deep disabled:opacity-50"
-                      >
-                        {cobrando === f.id ? <Spinner className="h-3 w-3" /> : <CheckCheck size={12} />} Cobrar
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          disabled={cobrando === f.id}
+                          onClick={() => void cobrarMP(f.id)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-neon/50 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-neon transition-colors hover:bg-neon hover:text-deep disabled:opacity-50"
+                        >
+                          {cobrando === f.id ? <Spinner className="h-3 w-3" /> : <PlugZap size={12} />} Cobrar con MP
+                        </button>
+                        <button
+                          onClick={() => void marcarPagada(f.id, tenant?.nombre ?? "la comunidad")}
+                          className="rounded-lg border border-white/15 px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white/50 transition-colors hover:border-white/40 hover:text-white"
+                          title="Marcar como pagada manualmente"
+                        >
+                          Pagada
+                        </button>
+                      </div>
                     ) : (
-                      <span className="font-mono text-[10px] uppercase text-white/30">—</span>
+                      <span className="block text-right font-mono text-[10px] uppercase text-white/30">—</span>
                     )}
                   </td>
                 </tr>
@@ -600,6 +927,46 @@ function Facturacion({ data, kpis, refetch }: { data: SaaSData; kpis: { mrr: num
           </tbody>
         </table>
       </div>
+
+      {/* punto de pago de Mercado Pago para una factura */}
+      {puntoMP && (
+        <Modal open onClose={() => setPuntoMP(null)} title={"Cobro a " + puntoMP.comunidad} wide>
+          <div className="space-y-4">
+            <p className="rounded-xl border border-pine/30 bg-pine/5 px-4 py-3 text-[13px] leading-relaxed text-ink2">
+              Envía este <strong className="text-ink">punto de pago</strong> a la comunidad. Al aprobarse en Mercado Pago,
+              el webhook lo registra y puedes marcar la factura como pagada.
+            </p>
+            <div className="flex items-center justify-between rounded-xl border border-line bg-paper px-5 py-4">
+              <div>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ink3">Total a cobrar</p>
+                <p className="tnum mt-1 font-display text-3xl font-bold text-pine">{fmtCLP(puntoMP.total)}</p>
+              </div>
+              <span className={"rounded-full px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide " + (puntoMP.modo === "produccion" ? "bg-pine text-neon" : "bg-amber/20 text-[#8a6114]")}>
+                {puntoMP.modo === "produccion" ? "Producción" : "Sandbox"}
+              </span>
+            </div>
+            <DesgloseComision base={puntoMP.monto} comisionApp={puntoMP.comisionApp} comisionMP={puntoMP.comisionMP} total={puntoMP.total} />
+            <div className="flex items-center gap-2 rounded-lg border border-line bg-card px-3.5 py-2.5">
+              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink2">{puntoMP.puntoDePago}</span>
+              <button
+                onClick={() => { void navigator.clipboard.writeText(puntoMP.puntoDePago); toast("Punto de pago copiado."); }}
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line text-ink2 transition-colors hover:border-pine hover:text-pine" title="Copiar enlace"
+              >
+                <Copy size={13} />
+              </button>
+              <a href={puntoMP.puntoDePago} target="_blank" rel="noreferrer" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-line text-ink2 transition-colors hover:border-pine hover:text-pine" title="Abrir punto de pago">
+                <ExternalLink size={13} />
+              </a>
+            </div>
+            <div className="flex justify-end gap-2.5 border-t border-line pt-4">
+              <Btn variant="ghost" onClick={() => setPuntoMP(null)}>Cerrar</Btn>
+              <Btn variant="neon" onClick={() => { void navigator.clipboard.writeText(puntoMP.puntoDePago); toast("Punto de pago copiado al portapapeles."); }}>
+                <Copy size={15} /> Copiar enlace de pago
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
