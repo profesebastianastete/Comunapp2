@@ -2,12 +2,13 @@
 # ============================================================
 #  EXPORTAR-A-GITHUB.SH  -  Asistente para subir ComunApp
 #  a GitHub desde macOS / Linux.
+#  Nota: vive en scripts/ y apunta a la raiz del proyecto.
 #
 #  Opción A (recomendada): instala GitHub CLI (gh) y usa [3]:
 #  crea el repositorio y sube todo de forma automática.
 #  Opción B: crea el repo vacío en github.com y usa [4].
 # ============================================================
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 VERDE='\033[0;32m'
 LIMA='\033[1;32m'
@@ -84,7 +85,7 @@ crear_gh() {
   command -v gh >/dev/null 2>&1 || {
     error "GitHub CLI no está instalado."
     echo "       En Mac: brew install gh   ·   Alternativa: usa la opción [4]."
-    read -rp "  Enter para volver..." _; return;
+    read -rp "  Enter para volver..."; return;
   }
   if ! gh auth status >/dev/null 2>&1; then
     echo -e "  ${AMARILLO}Primero inicia sesión en GitHub (elige HTTPS y tu navegador):${NC}"

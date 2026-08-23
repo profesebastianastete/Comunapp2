@@ -1,12 +1,13 @@
 @echo off
 chcp 65001 >nul
 title ComunApp - Exportar a GitHub
-cd /d "%~dp0"
+cd /d "%~dp0.."
 setlocal
 
 REM ============================================================
 REM  EXPORTAR-A-GITHUB.BAT  -  Asistente para subir ComunApp
 REM  a GitHub desde Windows.
+REM  Nota: vive en scripts\ y apunta a la raiz del proyecto.
 REM
 REM  Opcion A (recomendada): instala GitHub CLI (gh) y usa la
 REM  opcion [3]: crea el repositorio y sube todo automatico.

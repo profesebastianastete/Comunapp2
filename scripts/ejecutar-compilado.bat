@@ -1,12 +1,13 @@
 @echo off
 chcp 65001 >nul
 title ComunApp - Aplicacion compilada
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 REM ============================================================
 REM  COMUNAPP - LANZADOR DE LA VERSION COMPILADA (Windows)
 REM  Sirve la carpeta dist\ (build de produccion) y abre
 REM  la aplicacion en el navegador automaticamente.
+REM  Nota: vive en scripts\ y apunta a la raiz del proyecto.
 REM ============================================================
 
 if not exist dist\index.html (

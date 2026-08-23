@@ -3,8 +3,9 @@
 #  COMUNAPP - LANZADOR DE LA VERSION COMPILADA (macOS / Linux)
 #  Sirve la carpeta dist/ (build de produccion) y abre
 #  la aplicacion en el navegador automaticamente.
+#  Nota: vive en scripts/ y apunta a la raiz del proyecto.
 # ============================================================
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 if [ ! -f "dist/index.html" ]; then
   echo ""

@@ -1,21 +1,45 @@
-# Dependencias
+# ─────────────────────────────────────────────────────────────
+# ComunApp · .gitignore
+# El backend ES parte del repositorio (se despliega en Railway).
+# Solo se excluyen artefactos generados, caches y secretos.
+# ─────────────────────────────────────────────────────────────
+
+# Dependencias de Node
 node_modules/
 
-# Build de producción (se regenera con: npm run build)
+# Build de producción del frontend (se regenera con: npm run build)
 dist/
 
-# Backend Python generado por comunapp.bat / comunapp.sh
-backend/
+# ── Backend Python ───────────────────────────────────────────
+# Caches y bytecode
 __pycache__/
 *.pyc
-.venv/
-*.db
+*.pyo
+*.pyd
+.pytest_cache/
 
-# Entorno y sistema
+# Entorno virtual local
+.venv/
+venv/
+backend/.venv/
+
+# Bases de datos locales (SQLite). En producción se usa PostgreSQL
+# y la cadena de conexión llega por la variable DATABASE_URL.
+*.db
+*.sqlite
+*.sqlite3
+backend/comunapp.db
+
+# Archivos de entorno locales (contienen secretos).
+# Las plantillas *.env.example SÍ se suben.
 .env
-*.local
+.env.local
+backend/.env
+
+# ── Entorno y sistema ────────────────────────────────────────
 .DS_Store
 Thumbs.db
 *.log
 .next/
 build/
+*.local
