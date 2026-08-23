@@ -1,11 +1,11 @@
 import {
-  AlertTriangle, Building2, CheckCircle2, Coins, DoorOpen, FileSpreadsheet, Link2,
-  PlusCircle, Search, UploadCloud, Users, Wallet,
+  AlertTriangle, Building2, CheckCircle2, Coins, CreditCard, DoorOpen, ExternalLink,
+  FileSpreadsheet, KeyRound, Link2, PlugZap, PlusCircle, Search, ShieldCheck, UploadCloud, Users, Wallet,
 } from "lucide-react";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import {
-  crearMovimiento, crearVecino, desvincularMP, fmtCLP, fmtFecha, fmtMes, generarMes,
-  importarCSV, marcarSalida, periodoActual, registrarAcceso, registrarPagoVecino, ROL_LABEL, vincularMP,
+  configurarMP, crearMovimiento, crearVecino, desvincularMP, fmtCLP, fmtFecha, fmtMes, generarMes,
+  importarCSV, marcarSalida, periodoActual, probarMP, registrarAcceso, registrarPagoVecino, ROL_LABEL,
   type DatosComunidad, type FilaCSV, type Sesion,
 } from "../lib/store";
 import { Btn, Empty, EstadoTag, Field, Modal, RolTag, Spinner, StatCard, toast } from "./ui";
@@ -202,59 +202,185 @@ export function FormMovimiento({ datos, recargar }: { datos: DatosComunidad; rec
 /* ════════ COBROS EN LÍNEA (vinculación + importación) ════════ */
 export function ModuloCobranza({ datos, sesion, recargar }: { datos: DatosComunidad; sesion: Sesion; recargar: () => Promise<void> }) {
   const v = datos.comunidad.vinculacion;
-  const [modalMP, setModalMP] = useState(false);
-  const [email, setEmail] = useState("");
-  const [conectando, setConectando] = useState(false);
+  const [modalCfg, setModalCfg] = useState(false);
+  const [probando, setProbando] = useState(false);
 
-  const vincular = async () => {
-    if (!email.includes("@")) { toast("Escribe el correo de tu cuenta de Mercado Pago.", "warn"); return; }
-    setConectando(true);
-    await vincularMP(datos.comunidad.id, email);
-    await recargar();
-    setConectando(false);
-    setModalMP(false);
-    toast("¡Listo! Tu comunidad ya puede recibir pagos del mes en línea.");
+  const enmascarar = (s?: string) => (s ? s.slice(0, 6) + "••••" + s.slice(-4) : "—");
+
+  const probar = async () => {
+    setProbando(true);
+    const r = await probarMP(datos.comunidad.id);
+    setProbando(false);
+    if (r.ok) toast(r.mensaje + (r.cuenta ? " Cuenta: " + r.cuenta : ""));
+    else toast(r.mensaje, "warn");
   };
 
   return (
     <div className="fade-swap space-y-6">
-      {/* vinculación mercado pago */}
+      {/* configuración de Mercado Pago */}
       <div className={"relative overflow-hidden rounded-2xl border p-7 shadow-soft " + (v.conectada ? "border-neon2/70 bg-neon/10" : "border-line bg-card")}>
         <div className="flex flex-wrap items-start gap-5">
           <span className={"grid h-14 w-14 shrink-0 place-items-center rounded-2xl " + (v.conectada ? "bg-pine text-neon" : "bg-paper text-pine border border-line")}>
-            <Link2 size={26} />
+            <PlugZap size={26} />
           </span>
-          <div className="min-w-[240px] flex-1">
+          <div className="min-w-[260px] flex-1">
             <h3 className="font-display text-[22px] font-bold tracking-tight text-ink">Cobros en línea con Mercado Pago</h3>
             <p className="mt-1 max-w-2xl text-[13.5px] leading-relaxed text-ink2">
               {v.conectada
-                ? "Tu comunidad ya recibe los pagos del mes de propietarios y arrendatarios desde la aplicación. Cada pago queda registrado y conciliado."
-                : "Vincula tu cuenta de Mercado Pago para que los propietarios y arrendatarios paguen el mes desde su teléfono. Es la forma más simple de mantener la recaudación al día."}
+                ? "Tu comunidad ya puede recibir los pagos del mes de propietarios y arrendatarios desde la aplicación. Cada pago queda registrado y conciliado."
+                : "Configura las credenciales de tu cuenta de Mercado Pago para que los vecinos paguen el mes desde su teléfono. Usa el modo sandbox para probar sin dinero real."}
             </p>
-            {v.conectada && (
-              <div className="mt-4 flex flex-wrap items-center gap-2.5">
-                <span className="inline-flex items-center gap-2 rounded-full bg-pine px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-neon">
-                  <CheckCircle2 size={13} /> Conectada · {v.email}
-                </span>
-                {v.fecha && <span className="font-mono text-[11px] uppercase tracking-wide text-ink3">desde el {fmtFecha(v.fecha)}</span>}
-                <button onClick={async () => { await desvincularMP(datos.comunidad.id); await recargar(); toast("Cuenta desconectada. Los vecinos ya no pueden pagar en línea.", "warn"); }} className="font-mono text-[11px] font-bold uppercase tracking-wide text-signal underline-offset-4 hover:underline">
-                  Desvincular
-                </button>
+
+            {v.conectada ? (
+              <div className="mt-4 space-y-3">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-xl border border-line bg-card px-3.5 py-2.5">
+                    <p className="flex items-center gap-1.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-ink3"><KeyRound size={11} /> Access Token</p>
+                    <p className="mt-0.5 truncate font-mono text-[12px] font-semibold text-ink">{enmascarar(v.accessToken)}</p>
+                  </div>
+                  <div className="rounded-xl border border-line bg-card px-3.5 py-2.5">
+                    <p className="flex items-center gap-1.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-ink3"><ShieldCheck size={11} /> Public Key</p>
+                    <p className="mt-0.5 truncate font-mono text-[12px] font-semibold text-ink">{enmascarar(v.publicKey)}</p>
+                  </div>
+                  <div className="rounded-xl border border-line bg-card px-3.5 py-2.5">
+                    <p className="font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-ink3">Cuenta · modo</p>
+                    <p className="mt-0.5 truncate font-mono text-[12px] font-semibold text-ink">{v.email} · <span className={v.modo === "sandbox" ? "text-amber" : "text-pine"}>{v.modo === "sandbox" ? "SANDBOX" : "PRODUCCIÓN"}</span></p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-pine px-3.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-neon">
+                    <CheckCircle2 size={13} /> Conectada {v.fecha && "· " + fmtFecha(v.fecha)}
+                  </span>
+                  <Btn variant="paper" size="sm" onClick={() => void probar()} disabled={probando}>
+                    {probando ? <Spinner /> : <><PlugZap size={13} /> Probar conexión</>}
+                  </Btn>
+                  <button onClick={() => setModalCfg(true)} className="font-mono text-[11px] font-bold uppercase tracking-wide text-pine underline-offset-4 hover:underline">Reconfigurar</button>
+                  <button
+                    onClick={async () => { await desvincularMP(datos.comunidad.id); await recargar(); toast("Credenciales eliminadas. Los vecinos ya no pueden pagar en línea.", "warn"); }}
+                    className="font-mono text-[11px] font-bold uppercase tracking-wide text-signal underline-offset-4 hover:underline"
+                  >
+                    Desvincular
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Btn variant="neon" size="lg" onClick={() => setModalCfg(true)}><PlugZap size={17} /> Configurar Mercado Pago</Btn>
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink3">Necesitas tu Access Token y Public Key</span>
               </div>
             )}
           </div>
-          {!v.conectada && (
-            <div className="flex w-full flex-col gap-2 sm:w-auto">
-              <Btn variant="neon" size="lg" onClick={() => setModalMP(true)}><Link2 size={17} /> Vincular cuenta</Btn>
-              <span className="text-center font-mono text-[10px] uppercase tracking-[0.14em] text-ink3">Toma menos de 1 minuto</span>
-            </div>
-          )}
         </div>
       </div>
+
+      {modalCfg && (
+        <ModalConfigMP
+          comunidadId={datos.comunidad.id}
+          inicial={{ accessToken: v.accessToken ?? "", publicKey: v.publicKey ?? "", email: v.email ?? "", modo: v.modo ?? "sandbox" }}
+          onClose={() => setModalCfg(false)}
+          onSaved={async () => { setModalCfg(false); await recargar(); }}
+        />
+      )}
 
       {/* importación CSV */}
       <ImportarComunidad datos={datos} recargar={recargar} />
     </div>
+  );
+}
+
+/* ── Modal de configuración real de credenciales Mercado Pago ── */
+function ModalConfigMP({
+  comunidadId, inicial, onClose, onSaved,
+}: {
+  comunidadId: string;
+  inicial: { accessToken: string; publicKey: string; email: string; modo: "sandbox" | "produccion" };
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [accessToken, setAccessToken] = useState(inicial.accessToken);
+  const [publicKey, setPublicKey] = useState(inicial.publicKey);
+  const [email, setEmail] = useState(inicial.email);
+  const [modo, setModo] = useState<"sandbox" | "produccion">(inicial.modo);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const guardar = async () => {
+    if (!accessToken.trim()) return setError("El Access Token es obligatorio (lo usa el servidor para crear cobros).");
+    if (!publicKey.trim()) return setError("La Public Key es obligatoria (la usa el punto de pago en el navegador).");
+    if (!email.includes("@")) return setError("Escribe el correo de tu cuenta de Mercado Pago.");
+    setError(null);
+    setGuardando(true);
+    const r = await configurarMP(comunidadId, { accessToken: accessToken.trim(), publicKey: publicKey.trim(), email: email.trim(), modo });
+    setGuardando(false);
+    if (r.ok) {
+      toast("Credenciales de Mercado Pago guardadas. " + r.mensaje);
+      await onSaved();
+    } else {
+      setError(r.mensaje);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Configurar Mercado Pago" wide>
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 rounded-xl border border-pine/30 bg-pine/5 px-4 py-3">
+          <CreditCard size={18} className="mt-0.5 shrink-0 text-pine" />
+          <p className="text-[12.5px] leading-relaxed text-ink2">
+            Encuentra tus credenciales en el <strong className="text-ink">panel de desarrolladores de Mercado Pago</strong>{" "}
+            <span className="font-mono text-[11px] text-pine">(mercadopago.cl → Tu negocio → Configuración → Credenciales de producción / de prueba)</span>.
+            El <strong className="text-ink">Access Token</strong> crea los cobros desde el servidor y la <strong className="text-ink">Public Key</strong> muestra el punto de pago.
+          </p>
+        </div>
+
+        <Field label="Access Token" hint="Empieza por APP_USR- (producción) o TEST- (sandbox)">
+          <input className="field font-mono text-[12.5px]" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder="APP_USR-0000000000000000-..." />
+        </Field>
+        <Field label="Public Key" hint="Empieza por APP_USR- (producción) o TEST- (sandbox)">
+          <input className="field font-mono text-[12.5px]" value={publicKey} onChange={(e) => setPublicKey(e.target.value)} placeholder="APP_USR-xxxxxxxx-xxxx-..." />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Correo de la cuenta Mercado Pago">
+            <input className="field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tesoreria@tucomunidad.cl" />
+          </Field>
+          <Field label="Modo">
+            <div className="grid grid-cols-2 gap-2">
+              {(["sandbox", "produccion"] as const).map((m) => (
+                <button
+                  key={m} type="button" onClick={() => setModo(m)}
+                  className={"rounded-xl border-[1.5px] px-3 py-2.5 text-left font-mono text-[11px] font-bold uppercase tracking-wide transition-all " + (modo === m ? "border-pine bg-pine text-lime shadow-[3px_3px_0_0_#c9f24b]" : "border-line bg-card text-ink2 hover:border-pine")}
+                >
+                  {m === "sandbox" ? "Sandbox" : "Producción"}
+                  <span className={"block text-[9px] font-medium normal-case tracking-normal " + (modo === m ? "text-paper/70" : "text-ink3")}>
+                    {m === "sandbox" ? "pagos de prueba" : "dinero real"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+
+        {error && (
+          <p className="flex items-start gap-2 rounded-xl border-[1.5px] border-signal bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-[#a03526]">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" /> {error}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between gap-2.5 border-t border-line pt-4">
+          <a
+            href="https://www.mercadopago.cl/developers/panel" target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-pine underline-offset-4 hover:underline"
+          >
+            <ExternalLink size={12} /> Obtener credenciales
+          </a>
+          <div className="flex gap-2.5">
+            <Btn variant="ghost" onClick={onClose}>Cancelar</Btn>
+            <Btn variant="neon" onClick={() => void guardar()} disabled={guardando}>
+              {guardando ? <Spinner /> : <><CheckCircle2 size={15} /> Guardar credenciales</>}
+            </Btn>
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

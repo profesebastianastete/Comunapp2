@@ -81,11 +81,22 @@ export const registrarPagoVecino = (cid: string, cobroId: string, metodo: string
 export const crearMovimiento = (cid: string, data: { tipo: string; categoria: string; descripcion: string; monto: number; fecha: string }) =>
   post(`/api/comunidades/${cid}/movimientos`, data);
 
-/* ─────────────── Mercado Pago ─────────────── */
-export const vincularMP = (cid: string, email: string) =>
-  post<{ ok: boolean }>(`/api/comunidades/${cid}/mp/vincular`, { email });
+/* ─────────────── Mercado Pago (configuración real) ─────────────── */
+export const configurarMP = (cid: string, cfg: { accessToken: string; publicKey: string; email: string; modo?: string }) =>
+  post<{ ok: boolean; cuenta?: string; siteId?: string; mensaje: string }>(`/api/comunidades/${cid}/mp/configurar`, {
+    access_token: cfg.accessToken, public_key: cfg.publicKey, email: cfg.email, modo: cfg.modo,
+  });
+export const probarMP = (cid: string) =>
+  post<{ ok: boolean; cuenta?: string; siteId?: string; mensaje: string }>(`/api/comunidades/${cid}/mp/probar`);
 export const desvincularMP = (cid: string) =>
   post<{ ok: boolean }>(`/api/comunidades/${cid}/mp/desvincular`);
+
+/** Genera un cobro real vía API de Mercado Pago (Checkout Pro) y devuelve el punto de pago. */
+export const generarCobroMP = (cid: string, data: { monto: number; concepto: string; unidad?: string; emailPagador?: string }) =>
+  post<{ id: string; puntoDePago: string; monto: number; concepto: string; unidad?: string; creado: string }>(
+    `/api/comunidades/${cid}/mp/cobros`,
+    { monto: data.monto, concepto: data.concepto, unidad: data.unidad, email_pagador: data.emailPagador },
+  );
 
 /* ─────────────── importación CSV ─────────────── */
 export const importarCSV = (cid: string, filas: FilaCSV[]) =>

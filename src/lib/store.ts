@@ -24,7 +24,33 @@ export interface Usuario {
   id: string; nombre: string; email: string; password: string;
   activo: boolean; creado: string; rolGlobal: "SUPERADMIN" | null; membresias: Membresia[];
 }
-export interface Vinculacion { conectada: boolean; email?: string; fecha?: string }
+export interface Vinculacion {
+  conectada: boolean;
+  email?: string;
+  fecha?: string;
+  /* Credenciales reales de Mercado Pago (solo se guardan si el admin las configura) */
+  accessToken?: string;   // Access Token (server-side, crea cobros y verifica pagos)
+  publicKey?: string;     // Public Key (client-side, Checkout Pro / Bricks)
+  modo?: "sandbox" | "produccion";
+}
+
+/* Resultado de probar la conexión con Mercado Pago */
+export interface ResultadoMP {
+  ok: boolean;
+  cuenta?: string;      // email de la cuenta MP verificada
+  siteId?: string;      // MLA / MLC / MLB ...
+  mensaje: string;
+}
+
+/* Cobro generado vía API de Mercado Pago (Checkout Pro = "punto de pago") */
+export interface CobroMP {
+  id: string;               // id de la preferencia MP
+  puntoDePago: string;      // init_point: URL donde el vecino paga
+  monto: number;
+  concepto: string;
+  unidad?: string;
+  creado: string;
+}
 export interface Comunidad {
   id: string; nombre: string; direccion: string; ciudad: string;
   unidades: number; plan: PlanId; creada: string; estado: "ACTIVA" | "SUSPENDIDA";
@@ -468,22 +494,96 @@ export async function crearMovimiento(
   guardar();
 }
 
-/* ── vinculación Mercado Pago ───────────────────────────────── */
-export async function vincularMP(comunidadId: string, email: string) {
-  if (EN_API) return api.vincularMP(comunidadId, email);
-  await delay(1800);
+/* ── Mercado Pago · configuración real + cobros (Checkout Pro) ── */
+
+export interface ConfigMP {
+  accessToken: string;
+  publicKey: string;
+  email: string;
+  modo?: "sandbox" | "produccion";
+}
+
+/** Guarda las credenciales reales de Mercado Pago de la comunidad. */
+export async function configurarMP(comunidadId: string, cfg: ConfigMP): Promise<ResultadoMP> {
+  if (EN_API) return api.configurarMP(comunidadId, cfg);
+  await delay(1200);
   const d = db();
   const c = d.comunidades.find((x) => x.id === comunidadId)!;
-  c.vinculacion = { conectada: true, email, fecha: ahoraISO() };
-  evento("Cuenta de Mercado Pago vinculada · " + c.nombre);
+  const modo: "sandbox" | "produccion" = cfg.modo ?? (cfg.accessToken.includes("TEST") ? "sandbox" : "produccion");
+  c.vinculacion = {
+    conectada: true,
+    email: cfg.email,
+    fecha: ahoraISO(),
+    accessToken: cfg.accessToken,
+    publicKey: cfg.publicKey,
+    modo,
+  };
+  evento("Credenciales de Mercado Pago configuradas · " + c.nombre + " (" + modo + ")");
   guardar();
+  return { ok: true, cuenta: cfg.email, mensaje: "Credenciales guardadas correctamente." };
 }
+
+/** Prueba la conexión contra la API de Mercado Pago usando el Access Token guardado. */
+export async function probarMP(comunidadId: string): Promise<ResultadoMP> {
+  if (EN_API) return api.probarMP(comunidadId);
+  await delay(1400);
+  const c = db().comunidades.find((x) => x.id === comunidadId)!;
+  const v = c.vinculacion;
+  if (!v.accessToken) {
+    return { ok: false, mensaje: "Primero configura el Access Token de Mercado Pago." };
+  }
+  // Simulación de la llamada GET /users/me de Mercado Pago
+  const esSandbox = v.accessToken.includes("TEST");
+  return {
+    ok: true,
+    cuenta: v.email ?? "cuenta@" + (esSandbox ? "sandbox" : "mercadopago") + ".cl",
+    siteId: esSandbox ? "MLA (sandbox)" : "MLC",
+    mensaje: esSandbox
+      ? "Conexión correcta en modo sandbox. Los cobros serán de prueba."
+      : "Conexión correcta. La comunidad puede cobrar de forma real.",
+  };
+}
+
 export async function desvincularMP(comunidadId: string) {
   if (EN_API) return api.desvincularMP(comunidadId);
   await delay(400);
   const c = db().comunidades.find((x) => x.id === comunidadId)!;
   c.vinculacion = { conectada: false };
+  evento("Credenciales de Mercado Pago eliminadas · " + c.nombre);
   guardar();
+}
+
+/**
+ * Genera un cobro mediante la API de Mercado Pago (Checkout Pro).
+ * Devuelve el "punto de pago" (init_point) que el vecino abre para pagar.
+ * - Modo demo: simula la respuesta de POST /checkout/preferences.
+ * - Modo API: el backend crea la preferencia real con el Access Token de la comunidad.
+ */
+export async function generarCobroMP(
+  comunidadId: string,
+  data: { monto: number; concepto: string; unidad?: string; emailPagador?: string },
+): Promise<CobroMP> {
+  if (EN_API) return api.generarCobroMP(comunidadId, data);
+  await delay(1600);
+  const d = db();
+  const c = d.comunidades.find((x) => x.id === comunidadId)!;
+  if (!c.vinculacion.accessToken) {
+    throw new Error("Configura primero las credenciales de Mercado Pago de esta comunidad.");
+  }
+  const esSandbox = c.vinculacion.accessToken.includes("TEST");
+  const prefId = "PREF-" + uid().slice(0, 10).toUpperCase();
+  const cobro: CobroMP = {
+    id: prefId,
+    puntoDePago:
+      (esSandbox ? "https://sandbox.mercadopago.cl/checkout/v1/redirect?pref_id=" : "https://www.mercadopago.cl/checkout/v1/redirect?pref_id=") + prefId,
+    monto: data.monto,
+    concepto: data.concepto,
+    unidad: data.unidad,
+    creado: ahoraISO(),
+  };
+  evento("Cobro generado vía Mercado Pago · " + c.nombre + " · " + fmtCLP(data.monto));
+  guardar();
+  return cobro;
 }
 
 /* ── importación CSV ────────────────────────────────────────── */

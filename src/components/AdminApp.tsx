@@ -1,14 +1,14 @@
 import {
-  Activity, Building2, CreditCard, PlusCircle, Power, TrendingUp, Users,
+  Activity, Building2, Copy, CreditCard, ExternalLink, PlugZap, PlusCircle, Power, TrendingUp, Users,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  crearComunidadSaaS, fmtCLP, fmtFecha, fmtMes, listadoSaaS, PLAN_LABEL, toggleEstadoComunidad,
-  type PlanId, type Sesion,
+  crearComunidadSaaS, fmtCLP, fmtFecha, fmtMes, generarCobroMP, listadoSaaS, PLAN_LABEL, toggleEstadoComunidad,
+  type CobroMP, type PlanId, type Sesion,
 } from "../lib/store";
 import { Btn, CountUp, Empty, EstadoTag, Field, Modal, Spinner, toast } from "./ui";
 
-type Tab = "metricas" | "comunidades" | "facturacion" | "actividad";
+type Tab = "metricas" | "comunidades" | "cobrosmp" | "facturacion" | "actividad";
 
 interface SaaSData {
   comunidades: {
@@ -44,6 +44,7 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
   const tabs: { id: Tab; label: string; icon: typeof Activity }[] = [
     { id: "metricas", label: "Métricas", icon: Activity },
     { id: "comunidades", label: "Tenants", icon: Building2 },
+    { id: "cobrosmp", label: "Cobros MP", icon: PlugZap },
     { id: "facturacion", label: "Facturación", icon: CreditCard },
     { id: "actividad", label: "Eventos", icon: TrendingUp },
   ];
@@ -94,6 +95,8 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
             <Metricas data={data} kpis={kpis} />
           ) : tab === "comunidades" ? (
             <Tenants data={data} refetch={refetch} nueva={() => setModalNueva(true)} />
+          ) : tab === "cobrosmp" ? (
+            <CobrosMP data={data} refetch={refetch} />
           ) : tab === "facturacion" ? (
             <Facturacion data={data} kpis={kpis} />
           ) : (
