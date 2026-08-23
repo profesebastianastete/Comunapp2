@@ -11,6 +11,14 @@ import * as api from "./api";
 
 const EN_API = api.apiMode;
 
+/**
+ * Modo de operación de la aplicación:
+ *  · true  → MODO REAL: conectada al servidor (API FastAPI en Railway). Datos reales y compartidos.
+ *  · false → MODO LOCAL (fallback): solo cuando no hay servidor configurado; los datos
+ *            viven únicamente en este navegador. Nunca se presenta como "la app real".
+ */
+export const enLinea = api.apiMode;
+
 /* Caché local del modo API (para las lecturas síncronas: usuarioActual, etc.) */
 const UK = "comunapp_api_usuario";
 const CK = "comunapp_api_comunidades";

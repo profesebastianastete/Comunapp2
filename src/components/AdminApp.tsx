@@ -11,7 +11,7 @@ import {
   usuarioActual,
   type CobroFacturaMP, type CobroMP, type MPPlataforma, type Plan, type PlanId, type RolCondo, type Sesion, type Suscripcion,
 } from "../lib/store";
-import { Btn, CountUp, Empty, EstadoTag, Field, Modal, ModalCambiarPassword, Spinner, toast } from "./ui";
+import { Btn, CountUp, Empty, EstadoTag, Field, Modal, ModalCambiarPassword, ModoBadge, Spinner, toast } from "./ui";
 
 /* Nombre de plan: prioriza la lista dinámica, cae a las etiquetas clásicas. */
 const FALLBACK_PLAN: Record<string, string> = { COMITE: "Comité", PARCELAS: "Comunidad de Parcelas", CUSTOM: "Personalizado" };
@@ -87,6 +87,7 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-neon font-display text-[15px] font-bold text-deep">C</span>
           <span className="font-mono text-[12px] font-bold uppercase tracking-[0.22em] text-white">ComunApp <span className="text-neon">/ ops</span></span>
           <span className="hidden rounded-full border border-neon/40 px-2.5 py-0.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-neon sm:inline">superadmin · acceso restringido</span>
+          <ModoBadge dark className="hidden lg:inline-flex" />
           <div className="ml-auto flex items-center gap-3">
             <span className="hidden font-mono text-[11px] uppercase tracking-wide text-white/50 md:inline">ruta /adminapp · sin enlaces públicos</span>
             <button
