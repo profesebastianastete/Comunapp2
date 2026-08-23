@@ -1,4 +1,4 @@
-import { ArrowRight, Building2, Lock, Sparkles } from "lucide-react";
+import { ArrowRight, Building2, Eye, EyeOff, Lock } from "lucide-react";
 import { useState } from "react";
 import { login, type Sesion } from "../lib/store";
 import { Btn, Field, Logo, Spinner } from "./ui";
@@ -6,6 +6,7 @@ import { Btn, Field, Logo, Spinner } from "./ui";
 export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => void; volver: () => void }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
+  const [verPass, setVerPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -43,7 +44,25 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
               <input className="field" type="email" placeholder="tu@correo.cl" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
             </Field>
             <Field label="Contraseña">
-              <input className="field" type="password" placeholder="••••••••" value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" />
+              <div className="relative">
+                <input
+                  className="field pr-11"
+                  type={verPass ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={pass}
+                  onChange={(e) => setPass(e.target.value)}
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setVerPass((v) => !v)}
+                  title={verPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  aria-label={verPass ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  className="absolute right-2.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-lg text-ink3 transition-all hover:scale-110 hover:bg-paper hover:text-pine active:scale-95"
+                >
+                  {verPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </Field>
             {error && (
               <p className="rounded-xl border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>
@@ -62,7 +81,7 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
         <div className="mt-6 flex items-center justify-center gap-6 font-mono text-[10px] uppercase tracking-[0.16em] text-ink3">
           <span className="flex items-center gap-1.5"><Lock size={12} className="text-pine2" /> Sesión segura</span>
           <span className="flex items-center gap-1.5"><Building2 size={12} className="text-pine2" /> Tu comunidad, tus datos</span>
-          <span className="hidden items-center gap-1.5 sm:flex"><Sparkles size={12} className="text-pine2" /> Pagos con Mercado Pago</span>
+          <span className="hidden items-center gap-1.5 sm:flex"><Lock size={12} className="text-pine2" /> Pagos con Mercado Pago</span>
         </div>
       </div>
     </div>
