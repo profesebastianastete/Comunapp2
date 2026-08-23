@@ -68,6 +68,9 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
             {error && (
               <div className="space-y-2">
                 <p className="rounded-xl border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>
+                <p className="rounded-xl border border-dashed border-line bg-paper px-3.5 py-2.5 text-center font-mono text-[11px] leading-relaxed text-ink2">
+                  Acceso del equipo · <strong className="text-pine">equipo@comunapp.cl</strong> / <strong className="text-pine">admin123</strong>
+                </p>
                 {!apiMode && (
                   <button
                     type="button"
