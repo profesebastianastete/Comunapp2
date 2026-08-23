@@ -154,8 +154,12 @@ export function FormMovimiento({ datos, recargar }: { datos: DatosComunidad; rec
   const [busy, setBusy] = useState(false);
 
   const guardar = async () => {
-    if (!descripcion.trim() || monto <= 0) {
-      toast("Escribe una descripción y un monto válido.", "warn");
+    if (!descripcion.trim()) {
+      toast(tipo === "GASTO" ? "El motivo del gasto es obligatorio." : "Escribe el concepto del ingreso.", "warn");
+      return;
+    }
+    if (monto <= 0) {
+      toast("Indica un monto válido (mayor a 0).", "warn");
       return;
     }
     setBusy(true);
@@ -185,7 +189,9 @@ export function FormMovimiento({ datos, recargar }: { datos: DatosComunidad; rec
             {["Mantención", "Servicios", "Personal", "Seguridad", "Áreas verdes", "Pagos del mes", "Fondo de reserva", "Otros"].map((c) => <option key={c}>{c}</option>)}
           </select>
         </Field>
-        <Field label="Descripción"><input className="field" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder={tipo === "GASTO" ? "Ej: Reparación de luminarias" : "Ej: Recaudación parcial del mes"} /></Field>
+        <Field label={tipo === "GASTO" ? "Motivo" : "Concepto"} hint="obligatorio">
+          <input className="field" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} placeholder={tipo === "GASTO" ? "Ej: Reparación de luminarias del acceso sur" : "Ej: Recaudación parcial del mes"} />
+        </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Monto (CLP)"><input className="field" type="number" min={0} step={500} value={monto || ""} onChange={(e) => setMonto(Number(e.target.value))} placeholder="0" /></Field>
           <Field label="Fecha"><input className="field" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>

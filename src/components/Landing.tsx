@@ -1,9 +1,9 @@
 import {
-  ArrowRight, ArrowUpRight, BellRing, Building2, CalendarCheck2, CheckCircle2, ClipboardCheck,
+  ArrowRight, ArrowUpRight, BellRing, Building2, CheckCircle2, ClipboardCheck,
   DoorOpen, Home, Mail, MapPin, Megaphone, PieChart, ShieldCheck, Sparkles, Users, Vote, Wallet,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { Btn, CountUp, Field, Logo, Modal, Reveal, Spinner, toast } from "./ui";
+import { Btn, Field, Logo, Modal, Reveal, Spinner, toast } from "./ui";
 
 /* ═══════════════════════ LANDING ═══════════════════════ */
 export default function Landing({ entrar }: { entrar: () => void }) {
@@ -70,22 +70,6 @@ function Hero({ irA }: { irA: (id: string) => void }) {
               <Btn variant="neon" size="lg" onClick={() => irA("planes")}>Crea tu comunidad <ArrowRight size={17} /></Btn>
               <Btn variant="ghost" size="lg" onClick={() => irA("servicios")}>Ver servicios</Btn>
             </div>
-          </Reveal>
-          <Reveal delay={340}>
-            <dl className="mt-12 grid max-w-md grid-cols-3 divide-x divide-line border-y border-line py-5">
-              {[
-                { v: 38, s: "", l: "comunidades activas" },
-                { v: 1240, s: "+", l: "vecinos conectados" },
-                { v: 96, s: "%", l: "recaudación a tiempo" },
-              ].map((x, i) => (
-                <div key={x.l} className={"flex flex-col " + (i === 0 ? "pr-5" : "px-5")}>
-                  <dt className="order-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink3">{x.l}</dt>
-                  <dd className="order-1 font-display text-3xl font-bold text-pine">
-                    <CountUp to={x.v} suffix={x.s} />
-                  </dd>
-                </div>
-              ))}
-            </dl>
           </Reveal>
         </div>
 
@@ -222,14 +206,13 @@ function FranjaComunidad() {
 
 /* ── servicios ──────────────────────────────────────────────── */
 const SERVICIOS = [
+  { icon: PieChart, titulo: "Transparencia financiera", texto: "Cada ingreso y gasto a la vista de todos. Confianza que se nota.", tag: "El corazón de ComunApp" },
   { icon: Wallet, titulo: "Cobranza inteligente", texto: "Recibe pagos del mes, cuotas y multas automáticamente. Todo en línea.", tag: "Dinero en orden" },
-  { icon: DoorOpen, titulo: "Control de acceso", texto: "Registro de visitas y proveedores, con historial detallado.", tag: "Seguridad" },
-  { icon: CalendarCheck2, titulo: "Reservas de espacios", texto: "Quincho, salas y áreas comunes con calendario en tiempo real. Sin listas de papel.", tag: "Sin conflictos" },
   { icon: Vote, titulo: "Asambleas y votaciones", texto: "Decisiones de la comunidad con votos digitales, trazables y al instante.", tag: "Participación" },
   { icon: Megaphone, titulo: "Muro de avisos", texto: "Noticias, mantenciones y emergencias. Todos los vecinos informados a tiempo.", tag: "Comunicación" },
-  { icon: PieChart, titulo: "Transparencia financiera", texto: "Cada ingreso y gasto a la vista de todos. Confianza que se nota.", tag: "Confianza" },
 ];
 function Servicios() {
+  const [destacado, ...resto] = SERVICIOS;
   return (
     <section id="servicios" className="dotgrid-soft relative scroll-mt-24 py-24">
       <div className="mx-auto max-w-7xl px-5 md:px-8">
@@ -242,22 +225,71 @@ function Servicios() {
               </h2>
             </div>
             <p className="max-w-xs border-l-2 border-neon pl-4 text-[14px] leading-relaxed text-ink2">
-              Seis herramientas que trabajan juntas, para que administrar deje de ser una tarea de fin de semana.
+              Cuatro herramientas que trabajan juntas, para que administrar deje de ser una tarea de fin de semana.
             </p>
           </div>
         </Reveal>
 
-        <div className="relative mt-14">
-          {/* líneas que conectan las tarjetas */}
-          <svg className="pointer-events-none absolute inset-0 hidden h-full w-full lg:block" aria-hidden>
-            <defs>
-              <pattern id="dotserv" width="6" height="6" patternUnits="userSpaceOnUse">
-                <circle cx="1" cy="1" r="1" fill="#12523e" opacity="0.25" />
-              </pattern>
-            </defs>
-          </svg>
+        <div className="relative mt-14 space-y-5">
+          {/* tarjeta destacada: transparencia financiera primero */}
+          <Reveal>
+            <article className="group relative overflow-hidden rounded-3xl border border-pine bg-pine text-white shadow-lift transition-shadow duration-300 hover:shadow-[0_36px_80px_-24px_rgba(12,59,46,0.55)]">
+              <div className="dotgrid-dark pointer-events-none absolute inset-0" />
+              <div className="relative grid gap-10 p-8 md:p-12 lg:grid-cols-[1.05fr_1fr] lg:items-center">
+                <div>
+                  <span className="inline-flex items-center gap-2 rounded-full bg-neon px-3.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-deep">
+                    <Sparkles size={12} /> {destacado.tag}
+                  </span>
+                  <div className="mt-6 flex items-center gap-4">
+                    <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-neon text-deep shadow-neon transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-105">
+                      <destacado.icon size={26} />
+                    </span>
+                    <h3 className="font-display text-[clamp(1.7rem,3vw,2.5rem)] font-bold leading-tight tracking-tight">{destacado.titulo}</h3>
+                  </div>
+                  <p className="mt-4 max-w-lg text-[15.5px] leading-relaxed text-paper/80">{destacado.texto}</p>
+                  <ul className="mt-6 space-y-2.5">
+                    {["Reporte mensual descargable para toda la comunidad", "Cada gasto registrado exige su motivo", "Fondo de reserva siempre a la vista"].map((b) => (
+                      <li key={b} className="flex items-start gap-2.5 text-[13.5px] text-paper/85">
+                        <span className="mt-1 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-neon/20 text-neon"><CheckCircle2 size={11} strokeWidth={3} /></span>
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* mini libro de cuentas en vivo */}
+                <div className="rounded-2xl border border-white/15 bg-deep/45 p-6 backdrop-blur-sm">
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-neon">Libro de la comunidad · marzo</p>
+                  <ul className="mt-4 space-y-1">
+                    {[
+                      { d: "Recaudación del mes", m: "+ $220.000", ok: true },
+                      { d: "Electricidad áreas comunes", m: "− $46.500", ok: false, motivo: "Servicios" },
+                      { d: "Poda y jardinería", m: "− $85.000", ok: false, motivo: "Mantención" },
+                      { d: "Conserjería y guardia", m: "− $140.000", ok: false, motivo: "Personal" },
+                    ].map((r, i) => (
+                      <li key={r.d} className="ledger flex items-center justify-between gap-3 py-2.5 !border-white/10">
+                        <div>
+                          <p className="text-[13px] font-semibold text-paper">{r.d}</p>
+                          {r.motivo && <p className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-white/40">motivo: {r.motivo}</p>}
+                        </div>
+                        <span className={"bar-x tnum shrink-0 rounded-md px-2 py-1 font-mono text-[12px] font-bold " + (r.ok ? "bg-neon/15 text-neon" : "bg-white/5 text-paper/75")} style={{ animationDelay: i * 120 + "ms" }}>
+                          {r.m}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/10">
+                    <div className="bar-x h-full rounded-full bg-neon" style={{ width: "62%", animationDelay: "0.5s" }} />
+                  </div>
+                  <p className="mt-2 text-right font-mono text-[10px] uppercase tracking-[0.14em] text-white/45">62% de la recaudación ya rendida</p>
+                </div>
+              </div>
+            </article>
+          </Reveal>
+
+          {/* resto de servicios */}
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {SERVICIOS.map((s, i) => (
+            {resto.map((s, i) => (
               <Reveal key={s.titulo} delay={(i % 3) * 110}>
                 <article className="group relative h-full rounded-2xl border border-line bg-card p-7 shadow-soft transition-all duration-300 hover:-translate-y-1.5 hover:border-pine2/50 hover:shadow-lift">
                   <span className="absolute right-6 top-6 rounded-full border border-line bg-paper px-2.5 py-1 font-mono text-[9.5px] font-semibold uppercase tracking-[0.12em] text-ink3 transition-colors group-hover:border-neon2 group-hover:bg-neon/20 group-hover:text-pine">{s.tag}</span>
@@ -342,8 +374,7 @@ function ComoFunciona() {
 
 /* ── planes ─────────────────────────────────────────────────── */
 const FEATURES: Record<string, string[]> = {
-  COMITE: ["Hasta 20 unidades", "Pagos del mes y muro de avisos", "Reservas y votaciones", "1 administrador y comité", "Soporte por correo"],
-  PARCELAS: ["Unidades ilimitadas", "Cobranza con Mercado Pago", "Control de acceso y bitácora", "Importación de comunidades", "Transparencia financiera", "Soporte prioritario"],
+  PARCELAS: ["Unidades ilimitadas", "Cobranza con Mercado Pago", "Importación de comunidades", "Transparencia financiera", "Asambleas y votaciones", "Soporte prioritario"],
   CUSTOM: ["Soporte Premium", "Integraciones personalizadas", "Capacitación al equipo", "Gerente de cuenta dedicado", "Y mucho más"],
 };
 function Planes() {
@@ -361,15 +392,11 @@ function Planes() {
           </div>
         </Reveal>
 
-        <div className="mx-auto mt-14 grid max-w-5xl gap-5 lg:grid-cols-3">
-          {/* Comité */}
+        <div className="mx-auto mt-14 grid max-w-4xl gap-5 lg:grid-cols-2">
+          {/* Comunidades (destacado) */}
           <Reveal delay={0}>
-            <PlanCard nombre="Comité" precio="$0" periodo="/ mes" texto="Para comunidades pequeñas que parten ordenándose." features={FEATURES.COMITE} entrar={() => setCotiza(true)} btn="Comenzar gratis" />
-          </Reveal>
-          {/* Parcelas (destacado) */}
-          <Reveal delay={130}>
             <PlanCard
-              destacado nombre="Comunidad de Parcelas" precio="$29.900" periodo="/ mes"
+              destacado prefijo="desde" nombre="Comunidades" precio="$29.900" periodo="/ mes"
               texto="Para parcelaciones y comunidades que quieren todo en orden."
               features={FEATURES.PARCELAS} entrar={() => setCotiza(true)} btn="Elegir este plan"
             />
@@ -401,8 +428,8 @@ function Planes() {
 }
 
 function PlanCard({
-  nombre, precio, periodo, texto, features, entrar, btn, destacado = false,
-}: { nombre: string; precio: string; periodo: string; texto: string; features: string[]; entrar: () => void; btn: string; destacado?: boolean }) {
+  nombre, precio, periodo, texto, features, entrar, btn, destacado = false, prefijo,
+}: { nombre: string; precio: string; periodo: string; texto: string; features: string[]; entrar: () => void; btn: string; destacado?: boolean; prefijo?: string }) {
   return (
     <article
       className={
@@ -419,7 +446,8 @@ function PlanCard({
       )}
       <h3 className={"font-display text-xl font-bold tracking-tight " + (destacado ? "text-neon" : "text-ink")}>{nombre}</h3>
       <p className={"mt-1 text-[13px] leading-relaxed " + (destacado ? "text-white/70" : "text-ink2")}>{texto}</p>
-      <p className="mt-5 flex items-baseline gap-1.5">
+      <p className="mt-5 flex items-baseline gap-2">
+        {prefijo && <span className={"font-mono text-[11px] font-bold uppercase tracking-[0.14em] " + (destacado ? "text-neon" : "text-pine2")}>{prefijo}</span>}
         <span className={"font-display text-[38px] font-bold leading-none tracking-tight " + (destacado ? "text-white" : "text-pine")}>{precio}</span>
         {periodo && <span className={"font-mono text-[11px] uppercase tracking-wide " + (destacado ? "text-white/50" : "text-ink3")}>{periodo}</span>}
       </p>
@@ -447,6 +475,18 @@ function ModalCotizar({ open, onClose }: { open: boolean; onClose: () => void })
       return;
     }
     setEnviando(true);
+    // Abre el correo del usuario con la cotización dirigida a contacto@comunapp.cl
+    const asunto = encodeURIComponent("Cotización ComunApp · " + form.comunidad);
+    const cuerpo = encodeURIComponent(
+      "Hola, quiero cotizar un plan a la medida.\n\n" +
+      "· Nombre: " + form.nombre + "\n" +
+      "· Comunidad: " + form.comunidad + "\n" +
+      "· Unidades aproximadas: " + form.unidades + "\n" +
+      "· Correo de contacto: " + form.correo + "\n",
+    );
+    window.setTimeout(() => {
+      window.location.href = "mailto:contacto@comunapp.cl?subject=" + asunto + "&body=" + cuerpo;
+    }, 700);
     setTimeout(() => {
       setEnviando(false);
       setListo(true);
@@ -460,7 +500,7 @@ function ModalCotizar({ open, onClose }: { open: boolean; onClose: () => void })
           <span className="mx-auto grid h-16 w-16 place-items-center rounded-full bg-neon/30 text-pine"><CheckCircle2 size={32} /></span>
           <h4 className="mt-5 font-display text-2xl font-bold text-ink">¡Recibido, {form.nombre.split(" ")[0]}!</h4>
           <p className="mx-auto mt-2 max-w-sm text-[14px] leading-relaxed text-ink2">
-            Te escribiremos a <strong>{form.correo}</strong> en menos de 24 horas con una propuesta para <strong>{form.comunidad}</strong>.
+            Abrimos tu correo con la solicitud para <strong>contacto@comunapp.cl</strong> — solo presiona enviar. Te responderemos a <strong>{form.correo}</strong> en menos de 24 horas.
           </p>
           <Btn variant="primary" className="mt-6" onClick={() => { onClose(); setTimeout(() => setListo(false), 300); }}>Perfecto</Btn>
         </div>
@@ -506,15 +546,19 @@ function Footer({ entrar }: { entrar: () => void }) {
           <div>
             <p className="font-mono text-[10.5px] font-bold uppercase tracking-[0.22em] text-neon">Contacto</p>
             <ul className="mt-4 space-y-3 text-[13.5px] text-white/70">
-              <li className="flex items-center gap-2.5"><Mail size={15} className="text-neon" /> hola@comunapp.cl</li>
-              <li className="flex items-center gap-2.5"><MapPin size={15} className="text-neon" /> Temuco · Santiago · Pucón</li>
+              <li>
+                <a href="mailto:contacto@comunapp.cl" className="group flex items-center gap-2.5 transition-colors hover:text-neon">
+                  <Mail size={15} className="text-neon" /> contacto@comunapp.cl
+                </a>
+              </li>
+              <li className="flex items-center gap-2.5"><MapPin size={15} className="text-neon" /> Puerto Varas, Región de los Lagos</li>
               <li className="flex items-center gap-2.5"><ShieldCheck size={15} className="text-neon" /> Datos protegidos, siempre</li>
             </ul>
           </div>
         </div>
         <div className="mt-14 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6 font-mono text-[10.5px] uppercase tracking-[0.16em] text-white/40">
           <span>© {new Date().getFullYear()} ComunApp — hecho con cariño para las comunidades</span>
-          <span className="flex items-center gap-2"><Building2 size={13} className="text-neon" /> 38 comunidades confían en nosotros</span>
+          <span className="flex items-center gap-2"><Building2 size={13} className="text-neon" /> Puerto Varas · Región de los Lagos · Chile</span>
         </div>
       </div>
     </footer>
