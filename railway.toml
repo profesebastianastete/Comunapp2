@@ -1,0 +1,13 @@
+# Configuración de Railway para el FRONTEND (servicio en la raíz del repo).
+# El backend vive en backend/ y se crea como OTRO servicio con root "backend".
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm ci && npm run build"
+
+[deploy]
+startCommand = "node server.mjs"
+healthcheckPath = "/"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

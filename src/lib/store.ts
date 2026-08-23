@@ -2,7 +2,18 @@
    ComunApp · capa de datos (simula la API Python/FastAPI)
    Glosario obligatorio: "comunidad" (nunca condominio),
    "pagos del mes" / "tus pagos" (nunca gastos comunes).
+
+   MODO API: si VITE_API_URL está definida, las funciones de datos delegan en
+   la API real (src/lib/api.ts). Si no, se usa el modo demo (localStorage).
    ============================================================ */
+
+import * as api from "./api";
+
+const EN_API = api.apiMode;
+
+/* Caché local del modo API (para las lecturas síncronas: usuarioActual, etc.) */
+const UK = "comunapp_api_usuario";
+const CK = "comunapp_api_comunidades";
 
 export type RolCondo = "ADMIN" | "COMITE" | "PROPIETARIO" | "ARRENDATARIO";
 export type Rol = "SUPERADMIN" | RolCondo;
@@ -285,6 +296,13 @@ export function setSesion(s: Sesion | null) {
 }
 
 export async function login(email: string, password: string): Promise<Sesion> {
+  if (EN_API) {
+    const s = await api.login(email, password);
+    const u = await api.me();
+    localStorage.setItem(UK, JSON.stringify(u));
+    setSesion(s);
+    return s;
+  }
   await delay(650);
   const u = db().usuarios.find((x) => x.email.toLowerCase() === email.trim().toLowerCase());
   if (!u || u.password !== password) throw new Error("Correo o contraseña incorrectos.");
@@ -302,10 +320,22 @@ export async function login(email: string, password: string): Promise<Sesion> {
 }
 
 export function usuarioActual(s: Sesion): Usuario | null {
+  if (EN_API) {
+    try {
+      const u = JSON.parse(localStorage.getItem(UK) ?? "null") as Usuario | null;
+      return u && u.id === s.usuarioId ? u : null;
+    } catch { return null; }
+  }
   return db().usuarios.find((u) => u.id === s.usuarioId) ?? null;
 }
 export function comunidadActual(s: Sesion): Comunidad | null {
   if (!s.comunidadId) return null;
+  if (EN_API) {
+    try {
+      const lista = JSON.parse(localStorage.getItem(CK) ?? "[]") as Comunidad[];
+      return lista.find((c) => c.id === s.comunidadId) ?? null;
+    } catch { return null; }
+  }
   return db().comunidades.find((c) => c.id === s.comunidadId) ?? null;
 }
 export function cambiarComunidadSesion(s: Sesion, comunidadId: string): Sesion | null {
@@ -326,6 +356,15 @@ export interface DatosComunidad {
 }
 
 export async function datosComunidad(comunidadId: string): Promise<DatosComunidad> {
+  if (EN_API) {
+    const data = await api.datosComunidad(comunidadId);
+    try {
+      const lista = JSON.parse(localStorage.getItem(CK) ?? "[]") as Comunidad[];
+      const sinDup = lista.filter((c) => c.id !== data.comunidad.id);
+      localStorage.setItem(CK, JSON.stringify([...sinDup, data.comunidad]));
+    } catch { /* noop */ }
+    return data;
+  }
   await delay(350);
   const d = db();
   const comunidad = d.comunidades.find((c) => c.id === comunidadId);
@@ -349,6 +388,12 @@ export async function datosComunidad(comunidadId: string): Promise<DatosComunida
 }
 
 export function periodosDisponibles(comunidadId: string): string[] {
+  if (EN_API) {
+    const d = new Date();
+    const out = new Set<string>();
+    for (let i = 0; i < 3; i++) { out.add(d.toISOString().slice(0, 7)); d.setMonth(d.getMonth() - 1); }
+    return [...out].sort().reverse();
+  }
   const s = new Set(db().cobros.filter((c) => c.comunidadId === comunidadId).map((c) => c.periodo));
   s.add(periodoActual());
   return [...s].sort().reverse();
@@ -356,6 +401,7 @@ export function periodosDisponibles(comunidadId: string): string[] {
 
 /* ── cobranza ───────────────────────────────────────────────── */
 export async function generarMes(comunidadId: string, periodo: string, monto: number) {
+  if (EN_API) return api.generarMes(comunidadId, periodo, monto);
   await delay(600);
   const d = db();
   const comunidad = d.comunidades.find((c) => c.id === comunidadId)!;
@@ -377,6 +423,7 @@ export async function generarMes(comunidadId: string, periodo: string, monto: nu
 }
 
 export async function pagarCobro(comunidadId: string, cobroId: string): Promise<Pago> {
+  if (EN_API) return api.pagarCobro(comunidadId, cobroId);
   await delay(1400); // simula la pasarela
   const d = db();
   const cobro = d.cobros.find((c) => c.id === cobroId && c.comunidadId === comunidadId);
@@ -395,6 +442,7 @@ export async function pagarCobro(comunidadId: string, cobroId: string): Promise<
 }
 
 export async function registrarPagoVecino(comunidadId: string, cobroId: string, metodo: string) {
+  if (EN_API) return api.registrarPagoVecino(comunidadId, cobroId, metodo);
   await delay(600);
   const d = db();
   const cobro = d.cobros.find((c) => c.id === cobroId && c.comunidadId === comunidadId);
@@ -412,6 +460,7 @@ export async function crearMovimiento(
   comunidadId: string,
   data: { tipo: "INGRESO" | "GASTO"; categoria: string; descripcion: string; monto: number; fecha: string },
 ) {
+  if (EN_API) return api.crearMovimiento(comunidadId, data);
   await delay(550);
   const d = db();
   d.movimientos.push({ id: uid(), comunidadId, conciliado: false, ...data });
@@ -421,6 +470,7 @@ export async function crearMovimiento(
 
 /* ── vinculación Mercado Pago ───────────────────────────────── */
 export async function vincularMP(comunidadId: string, email: string) {
+  if (EN_API) return api.vincularMP(comunidadId, email);
   await delay(1800);
   const d = db();
   const c = d.comunidades.find((x) => x.id === comunidadId)!;
@@ -429,6 +479,7 @@ export async function vincularMP(comunidadId: string, email: string) {
   guardar();
 }
 export async function desvincularMP(comunidadId: string) {
+  if (EN_API) return api.desvincularMP(comunidadId);
   await delay(400);
   const c = db().comunidades.find((x) => x.id === comunidadId)!;
   c.vinculacion = { conectada: false };
@@ -441,6 +492,7 @@ export interface FilaCSV {
   contacto?: string; correo: string; deuda: number;
 }
 export async function importarCSV(comunidadId: string, filas: FilaCSV[]) {
+  if (EN_API) return api.importarCSV(comunidadId, filas);
   await delay(900);
   const d = db();
   let vecinos = 0; let cargos = 0;
@@ -491,6 +543,7 @@ export async function importarCSV(comunidadId: string, filas: FilaCSV[]) {
 
 /* ── comunicación y comunidad ───────────────────────────────── */
 export async function crearAviso(comunidadId: string, data: { titulo: string; cuerpo: string; tipo: Aviso["tipo"]; autor: string }) {
+  if (EN_API) return api.crearAviso(comunidadId, data);
   await delay(500);
   db().avisos.unshift({ id: uid(), comunidadId, creado: ahoraISO(), ...data });
   evento("Aviso publicado: " + data.titulo);
@@ -498,6 +551,7 @@ export async function crearAviso(comunidadId: string, data: { titulo: string; cu
 }
 
 export async function crearReserva(comunidadId: string, data: { area: string; fecha: string; bloque: Reserva["bloque"]; unidad: string; residente: string }) {
+  if (EN_API) return api.crearReserva(comunidadId, data);
   await delay(500);
   const d = db();
   const choque = d.reservas.some((r) => r.comunidadId === comunidadId && r.area === data.area && r.fecha === data.fecha && r.bloque === data.bloque);
@@ -507,6 +561,7 @@ export async function crearReserva(comunidadId: string, data: { area: string; fe
   guardar();
 }
 export async function cancelarReserva(comunidadId: string, reservaId: string) {
+  if (EN_API) return api.cancelarReserva(comunidadId, reservaId);
   await delay(400);
   const d = db();
   d.reservas = d.reservas.filter((r) => !(r.id === reservaId && r.comunidadId === comunidadId));
@@ -514,12 +569,14 @@ export async function cancelarReserva(comunidadId: string, reservaId: string) {
 }
 
 export async function crearVotacion(comunidadId: string, data: { titulo: string; pregunta: string; opciones: string[] }) {
+  if (EN_API) return api.crearVotacion(comunidadId, data);
   await delay(500);
   db().votaciones.unshift({ id: uid(), comunidadId, abierta: true, creado: ahoraISO(), votos: [], ...data });
   evento("Votación abierta: " + data.titulo);
   guardar();
 }
 export async function votar(comunidadId: string, votacionId: string, unidad: string, opcion: string) {
+  if (EN_API) return api.votar(comunidadId, votacionId, unidad, opcion);
   await delay(600);
   const d = db();
   const v = d.votaciones.find((x) => x.id === votacionId && x.comunidadId === comunidadId);
@@ -532,12 +589,14 @@ export async function votar(comunidadId: string, votacionId: string, unidad: str
 }
 
 export async function registrarAcceso(comunidadId: string, data: { visitante: string; tipo: RegistroAcceso["tipo"]; unidad: string }) {
+  if (EN_API) return api.registrarAcceso(comunidadId, data);
   await delay(400);
   db().bitacora.unshift({ id: uid(), comunidadId, entrada: ahoraISO(), salida: null, ...data });
   evento("Ingreso registrado: " + data.visitante);
   guardar();
 }
 export async function marcarSalida(comunidadId: string, registroId: string) {
+  if (EN_API) return api.marcarSalida(comunidadId, registroId);
   await delay(300);
   const r = db().bitacora.find((x) => x.id === registroId && x.comunidadId === comunidadId);
   if (r) { r.salida = ahoraISO(); guardar(); }
@@ -545,6 +604,7 @@ export async function marcarSalida(comunidadId: string, registroId: string) {
 
 /* ── gestión de vecinos (admin) ─────────────────────────────── */
 export async function crearVecino(comunidadId: string, data: { nombre: string; email: string; password: string; rol: RolCondo; unidad?: string }) {
+  if (EN_API) return api.crearVecino(comunidadId, data);
   await delay(550);
   const d = db();
   if (d.usuarios.some((u) => u.email.toLowerCase() === data.email.toLowerCase()))
@@ -560,6 +620,12 @@ export async function crearVecino(comunidadId: string, data: { nombre: string; e
 
 /* ── súper admin · SaaS ─────────────────────────────────────── */
 export async function listadoSaaS() {
+  if (EN_API) {
+    return (await api.listadoSaaS()) as unknown as {
+      comunidades: (Comunidad & { usuarios: number; cobrosMes: number; recaudado: number })[];
+      usuarios: Usuario[]; facturas: FacturaSaaS[]; seriePagos: DiaPago[]; eventos: Evento[];
+    };
+  }
   await delay(450);
   const d = db();
   return {
@@ -574,6 +640,7 @@ export async function listadoSaaS() {
 }
 
 export async function crearComunidadSaaS(data: { nombre: string; direccion: string; ciudad: string; unidades: number; plan: PlanId; emailAdmin: string; nombreAdmin: string }) {
+  if (EN_API) { await api.crearComunidadSaaS(data); return; }
   await delay(700);
   const d = db();
   const id = "c_" + uid().slice(0, 6);
@@ -591,6 +658,7 @@ export async function crearComunidadSaaS(data: { nombre: string; direccion: stri
   guardar();
 }
 export async function toggleEstadoComunidad(comunidadId: string) {
+  if (EN_API) return api.toggleEstadoComunidad(comunidadId);
   await delay(400);
   const c = db().comunidades.find((x) => x.id === comunidadId)!;
   c.estado = c.estado === "ACTIVA" ? "SUSPENDIDA" : "ACTIVA";
