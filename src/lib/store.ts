@@ -220,7 +220,7 @@ function seed(): DB {
   })();
 
   const usuarios: Usuario[] = [
-    { id: "u_eq", nombre: "Valeria Soto", email: "equipo@comunapp.cl", password: "admin123", activo: true, creado: diasAtras(240), rolGlobal: "SUPERADMIN", membresias: [] },
+    { id: "u_eq", nombre: "Sebastian Astete", email: "equipo@comunapp.cl", password: "admin123", activo: true, creado: diasAtras(240), rolGlobal: "SUPERADMIN", membresias: [] },
     { id: "u_ad", nombre: "Rodrigo Fuentes", email: "admin@losalamos.cl", password: "admin123", activo: true, creado: diasAtras(180), rolGlobal: null, membresias: [{ comunidadId: cAlamos, rol: "ADMIN" }] },
     { id: "u_co", nombre: "Carla Méndez", email: "comite@losalamos.cl", password: "comite123", activo: true, creado: diasAtras(170), rolGlobal: null, membresias: [{ comunidadId: cAlamos, rol: "COMITE" }] },
     { id: "u_ma", nombre: "María López", email: "maria@demo.cl", password: "demo123", activo: true, creado: diasAtras(150), rolGlobal: null, membresias: [{ comunidadId: cAlamos, rol: "PROPIETARIO", unidad: "P-14" }] },
@@ -378,6 +378,9 @@ function db(): DB {
       if (!d.planes) d.planes = seed().planes;
       if (!d.suscripciones) d.suscripciones = [];
       if (!d.mpPlataforma) d.mpPlataforma = { conectada: false };
+      // Corrige el nombre genérico antiguo del superadmin en bases locales previas
+      const sup = d.usuarios.find((u) => u.rolGlobal === "SUPERADMIN");
+      if (sup && sup.nombre === "Valeria Soto") sup.nombre = "Sebastian Astete";
       cache = d;
       return cache;
     }

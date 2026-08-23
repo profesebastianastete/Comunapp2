@@ -422,7 +422,7 @@ function seed(){
       {id:"u_comite",nombre:"Carla Méndez",email:"comite@losalamos.cl",pass:"comite123",activo:true,rolGlobal:null},
       {id:"u_maria",nombre:"María López",email:"maria@demo.cl",pass:"demo123",activo:true,rolGlobal:null},
       {id:"u_jorge",nombre:"Jorge Salas",email:"jorge@demo.cl",pass:"demo123",activo:true,rolGlobal:null},
-      {id:"u_super",nombre:"Valeria Soto",email:"equipo@comunapp.cl",pass:"admin123",activo:true,rolGlobal:"SUPERADMIN"}
+      {id:"u_super",nombre:"Sebastian Astete",email:"equipo@comunapp.cl",pass:"admin123",activo:true,rolGlobal:"SUPERADMIN"}
     ],
     membresias:[
       {usuarioId:"u_admin",rol:"ADMIN",unidad:null},

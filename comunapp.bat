@@ -721,7 +721,7 @@ echo     if rol_parcela:>> backend\seed.py
 echo         s.add(MiembroParcela(usuario_id=u.id, parcela_id=parcela.id, rol=rol_parcela, unidad=unidad))>> backend\seed.py
 echo     return u>> backend\seed.py
 echo.>> backend\seed.py
-echo asegurar("plataforma@comunapp.cl", "Valeria Soto", "admin123", rol_global="SUPERADMIN")>> backend\seed.py
+echo asegurar("plataforma@comunapp.cl", "Sebastian Astete", "admin123", rol_global="SUPERADMIN")>> backend\seed.py
 echo asegurar("admin@torresdelparque.cl", "Rodrigo Fuentes", "admin123", rol_parcela="ADMIN")>> backend\seed.py
 echo asegurar("comite@torresdelparque.cl", "Carla Mendez", "comite123", rol_parcela="COMITE")>> backend\seed.py
 echo asegurar("maria@demo.cl", "Maria Lopez", "demo123", rol_parcela="PROPIETARIO", unidad="A-42")>> backend\seed.py

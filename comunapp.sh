@@ -762,7 +762,7 @@ def asegurar(email, nombre, password, rol_global="", rol_parcela="", unidad=""):
     return u
 
 
-asegurar("plataforma@comunapp.cl", "Valeria Soto", "admin123", rol_global="SUPERADMIN")
+asegurar("plataforma@comunapp.cl", "Sebastian Astete", "admin123", rol_global="SUPERADMIN")
 asegurar("admin@torresdelparque.cl", "Rodrigo Fuentes", "admin123", rol_parcela="ADMIN")
 asegurar("comite@torresdelparque.cl", "Carla Mendez", "comite123", rol_parcela="COMITE")
 asegurar("maria@demo.cl", "Maria Lopez", "demo123", rol_parcela="PROPIETARIO", unidad="A-42")
