@@ -5,9 +5,15 @@
 builder = "NIXPACKS"
 # Fija Node 22 (Tailwind v4 / oxide exige >= 20 y elimina los warnings EBADENGINE)
 NIXPACKS_NODE_VERSION = "22"
-# `rm -rf node_modules` antes de `npm ci` evita el error
-# "EBUSY: resource busy or locked, rmdir node_modules/.cache"
-buildCommand = "rm -rf node_modules && npm ci --no-audit --no-fund && npm run build"
+
+# ── FIX del error "rm: cannot remove 'node_modules/.cache': Device or resource busy" ──
+# Railway MONTA un volumen de Build Cache en node_modules/.cache: la carpeta no se
+# puede borrar (es un punto de montaje), pero su contenido sí.
+#  · `node_modules/*`      → el glob de bash EXCLUYE dotfiles, así que .cache no se toca
+#  · `node_modules/.cache/*` → vacía el contenido del montaje sin borrar el punto de montaje
+#  · `npm install` (NO `npm ci`) → npm ci ejecuta su propio "rm -rf node_modules"
+#    por dentro y vuelve a chocar con el montaje (EBUSY). npm install no lo hace.
+buildCommand = "rm -rf node_modules/* 2>/dev/null; rm -rf node_modules/.cache/* 2>/dev/null; npm install --no-audit --no-fund && npm run build"
 
 [deploy]
 startCommand = "node server.mjs"
