@@ -1,11 +1,11 @@
-import { Lock, RotateCcw } from "lucide-react";
+import { Lock, PlugZap, RotateCcw, ServerCrash } from "lucide-react";
 import { Component, useEffect, useState, type ReactNode } from "react";
 import AdminApp from "./components/AdminApp";
 import Dashboard from "./components/Dashboard";
 import Entrar from "./components/Entrar";
 import Landing from "./components/Landing";
 import { Btn, Logo, Toaster, toast } from "./components/ui";
-import { getSesion, ROL_LABEL, setSesion, usuarioActual, type Sesion } from "./lib/store";
+import { apiMode, getSesion, logout, ROL_LABEL, setSesion, usuarioActual, type Sesion } from "./lib/store";
 
 /* ── mini router por hash ───────────────────────────────────── */
 function useRuta() {
@@ -26,13 +26,16 @@ export default function App() {
   const ruta = useRuta();
   const [sesion, setSesionState] = useState<Sesion | null>(() => getSesion());
 
+  // Modo real únicamente: sin VITE_API_URL no hay aplicación (no existe modo demo).
+  if (!apiMode) return <SinBackend />;
+
   const alEntrar = (s: Sesion) => {
     setSesionState(s);
     irA(s.rol === "SUPERADMIN" ? "/adminapp" : "/dashboard");
     toast("Sesión iniciada como " + ROL_LABEL[s.rol] + ".");
   };
   const salir = () => {
-    setSesion(null);
+    logout();
     setSesionState(null);
     irA("/");
     toast("Sesión cerrada. ¡Hasta pronto!", "warn");
@@ -46,12 +49,12 @@ export default function App() {
     }
   }, [ruta, sesion]);
 
-  /* sesión huérfana: la cuenta ya no existe en los datos (reset, redeploy, caché vieja) */
+  /* sesión huérfana: el token no corresponde a un usuario en caché (sesión expirada o redeploy) */
   useEffect(() => {
     if (sesion && !usuarioActual(sesion)) {
-      setSesion(null);
+      logout();
       setSesionState(null);
-      toast("Tu sesión venció porque los datos cambiaron. Vuelve a entrar.", "warn");
+      toast("Tu sesión venció. Vuelve a entrar.", "warn");
       irA("/entrar");
     }
   }, [sesion]);
@@ -110,7 +113,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { fallo: boolean 
           <Btn
             variant="ghost" size="lg"
             onClick={() => {
-              setSesion(null);
+              logout();
               window.location.hash = "/entrar";
               window.location.reload();
             }}
@@ -144,6 +147,37 @@ function AccesoRestringido({ entrar, volver }: { entrar: () => void; volver: () 
       <div className="mt-8 flex flex-wrap justify-center gap-3">
         <Btn variant="neon" size="lg" onClick={entrar}>Ingresar con mi cuenta</Btn>
         <Btn variant="ghost" size="lg" onClick={volver} className="border-white/25! text-white/80! hover:border-white! hover:bg-white/10!">Volver al sitio</Btn>
+      </div>
+      <div className="mt-12"><Logo dark /></div>
+    </div>
+  );
+}
+
+/* La app corre solo en modo real: sin backend configurado no se muestra nada. */
+function SinBackend() {
+  return (
+    <div className="dotgrid-dark flex min-h-screen flex-col items-center justify-center bg-deep px-5 text-center text-white">
+      <span className="grid h-16 w-16 place-items-center rounded-2xl border border-neon/40 bg-neon/10 text-neon">
+        <ServerCrash size={30} />
+      </span>
+      <p className="mt-6 font-mono text-[11px] font-bold uppercase tracking-[0.26em] text-neon">ComunApp · sin conexión al servidor</p>
+      <h1 className="mt-3 font-display text-[clamp(2rem,5vw,3.4rem)] font-bold leading-tight tracking-tight">
+        Esta instalación necesita su API.
+      </h1>
+      <p className="mt-4 max-w-lg text-[14.5px] leading-relaxed text-white/60">
+        ComunApp funciona únicamente contra su backend (FastAPI + PostgreSQL). La variable de entorno
+        <code className="mx-1.5 rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[12.5px] text-neon">VITE_API_URL</code>
+        no está definida en este despliegue, por lo que la aplicación no puede iniciar.
+      </p>
+      <div className="mt-7 max-w-lg rounded-xl border border-white/12 bg-white/[0.04] p-5 text-left">
+        <p className="flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-neon">
+          <PlugZap size={14} /> Cómo activarla en Railway
+        </p>
+        <ol className="mt-3 list-inside list-decimal space-y-1.5 text-[13.5px] leading-relaxed text-white/70">
+          <li>Abre el servicio <strong className="text-white">frontend</strong> → Settings → Variables.</li>
+          <li>Crea la variable <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[12px] text-neon">VITE_API_URL</code> con la URL pública de tu API (ej. <span className="font-mono text-[12px]">https://comunapp-api.up.railway.app</span>).</li>
+          <li>Redespliega el frontend (Deploy → Redeploy).</li>
+        </ol>
       </div>
       <div className="mt-12"><Logo dark /></div>
     </div>

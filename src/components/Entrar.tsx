@@ -1,40 +1,28 @@
-import { ArrowRight, Building2, Eye, EyeOff, Lock, RotateCcw } from "lucide-react";
-import { useEffect, useState } from "react";
-import { apiMode } from "../lib/api";
-import { login, resetDemo, type Sesion } from "../lib/store";
-import { Btn, Field, Logo, Spinner, toast } from "./ui";
+import { ArrowRight, Building2, Eye, EyeOff, Lock, ShieldAlert } from "lucide-react";
+import { useState } from "react";
+import { login, type Sesion } from "../lib/store";
+import { Btn, Field, Logo, Spinner } from "./ui";
 
 export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => void; volver: () => void }) {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [verPass, setVerPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sinServidor, setSinServidor] = useState(false);
   const [cargando, setCargando] = useState(false);
 
-  // Si el servidor no responde, la app degrada a datos locales: se avisa una vez,
-  // mostrando la URL intentada para facilitar el diagnóstico de variables de entorno.
-  useEffect(() => {
-    const aviso = (ev: Event) => {
-      const url = (ev as CustomEvent<string>).detail;
-      toast(
-        "Sin conexión con el servidor" + (url ? " (" + url + ")" : "") +
-        ". Se usaron datos locales; revisa VITE_API_URL en Railway.",
-        "warn",
-      );
-    };
-    window.addEventListener("comunapp:red-caida", aviso);
-    return () => window.removeEventListener("comunapp:red-caida", aviso);
-  }, []);
-
   const entrar = async () => {
-    if (!email || !pass) { setError("Escribe tu correo y contraseña."); return; }
+    if (!email || !pass) { setError("Escribe tu correo y contraseña."); setSinServidor(false); return; }
     setError(null);
+    setSinServidor(false);
     setCargando(true);
     try {
       const s = await login(email, pass);
       onLogin(s);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo iniciar sesión.");
+      // El cliente marca los errores de red (servidor caído o en reposo)
+      setSinServidor(e instanceof Error && /servidor|conectar/i.test(e.message));
       setCargando(false);
     }
   };
@@ -83,18 +71,11 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
             {error && (
               <div className="space-y-2">
                 <p className="rounded-xl border border-signal/40 bg-signal/10 px-3.5 py-2.5 text-[13px] font-medium text-signal">{error}</p>
-                {!apiMode && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      resetDemo();
-                      setError(null);
-                      toast("Acceso restablecido. Vuelve a intentar.", "ok");
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-pine/40 px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-wide text-pine transition-colors hover:border-pine hover:bg-pine/5"
-                  >
-                    <RotateCcw size={13} /> Restablecer acceso
-                  </button>
+                {sinServidor && (
+                  <p className="flex items-start gap-2 rounded-xl border border-amber/40 bg-amber/10 px-3.5 py-2.5 text-[12.5px] leading-snug text-[#8a6114]">
+                    <ShieldAlert size={15} className="mt-0.5 shrink-0" />
+                    Si el servicio estuvo inactivo, puede tardar unos segundos en despertar: presiona Entrar nuevamente.
+                  </p>
                 )}
               </div>
             )}
