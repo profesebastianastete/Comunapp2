@@ -1,161 +1,128 @@
-# Mercado Pago en ComunApp — Guía de configuración real
+# Integración con Mercado Pago
 
-ComunApp integra **Checkout Pro** de Mercado Pago. Cada comunidad usa **su propia cuenta**
-(sus credenciales), y el backend crea los cobros y concilia los pagos automáticamente.
+ComunApp cobra a través de Mercado Pago usando **Checkout Pro** (pagos únicos) y **Preapproval** (suscripciones de pago automático). Esta guía explica la configuración, las comisiones y el flujo de conciliación.
 
 ---
 
-## 1. Conceptos rápidos
+## El modelo de comisiones (5%)
 
-| Credencial | Para qué sirve | Dónde se usa |
+A **todo** cobro generado por Mercado Pago se le suma un **5%** de comisiones. Ese total es lo que efectivamente se le cobra al pagador:
+
+| Concepto | % | Destino |
 |---|---|---|
-| **Access Token** | Crear cobros y verificar pagos (operaciones sensibles) | **Solo en el backend** (nunca en el navegador) |
-| **Public Key** | Identificar tu cuenta en el navegador (punto de pago, Bricks) | Frontend |
+| Comisión de aplicación (ComunApp) | **3%** | La plataforma |
+| Comisión de Mercado Pago | **2%** | Mercado Pago |
+| **Total agregado** | **5%** | — |
 
-| Modo | Token empieza por… | Dinero |
-|---|---|---|
-| **Sandbox** (pruebas) | `TEST-` | No. Pagos simulados con tarjetas de prueba |
-| **Producción** | `APP_USR-` | Sí. Cobros reales |
-
-> Recomendación: configura primero **Sandbox**, verifica que todo funcione y luego
-> cambia a **Producción** con sus credenciales.
-
----
-
-## 2. Obtener las credenciales
-
-1. Entra al **panel de desarrolladores**: <https://www.mercadopago.cl/developers/panel>
-   (cambia el dominio según tu país: `.com.ar`, `.com.mx`, `.com.br`…).
-2. Ve a **Tu negocio → Configuración → Credenciales**.
-3. Copia:
-   - **Credenciales de prueba** → `Access Token (TEST-…)` y `Public Key (TEST-…)`.
-   - **Credenciales de producción** → `Access Token (APP_USR-…)` y `Public Key (APP_USR-…)`.
-
----
-
-## 3. Configurar una comunidad (panel del Administrador)
-
-1. Entra como **Administrador** de la comunidad.
-2. Menú lateral → **Cobros en línea** → botón **«Configurar Mercado Pago»**.
-3. Completa:
-   - **Access Token** (`TEST-…` o `APP_USR-…`)
-   - **Public Key**
-   - **Correo de la cuenta** de Mercado Pago
-   - **Modo**: Sandbox o Producción
-4. Guarda. Usa **«Probar conexión»**: el backend llama a `GET /users/me` de Mercado Pago
-   y confirma la cuenta y el sitio (`MLC`, `MLA`, …).
-
-Las credenciales quedan guardadas en la base de datos del tenant y **solo el backend las lee**.
-
----
-
-## 4. Generar cobros
-
-Hay dos formas (ambas usan la API oficial `POST /checkout/preferences`):
-
-### A. Desde el panel del Super Admin (`/adminapp` → pestaña «Cobros MP»)
-- Elige la comunidad, monto, concepto, unidad y (opcional) correo del pagador.
-- Al generar, ComunApp crea la preferencia **con las credenciales de esa comunidad** y
-  devuelve el **punto de pago** (`init_point`), con botones para copiarlo o abrirlo.
-- Envíale ese enlace al vecino: al pagarlo, el webhook concilia solo.
-
-### B. Desde el panel de la comunidad
-- El administrador genera los «Pagos del mes» y los vecinos pagan desde «Tus Pagos».
-- Con Mercado Pago vinculado, el pago abre el Checkout Pro de la comunidad.
-
----
-
-## 5. El webhook (conciliación automática)
-
-Cuando un pago se **aprueba**, Mercado Pago notifica a:
-
+**Ejemplo:** un pago del mes de `$55.000` se cobra como:
 ```
-POST  https://TU-API.up.railway.app/api/mp/webhook
+base            $55.000
++ 3% ComunApp   $ 1.650
++ 2% MercadoPago $ 1.100
+──────────────────────
+total a cobrar  $57.750
 ```
 
-El backend:
-1. Consulta `GET /v1/payments/{id}` para verificar el estado real del pago.
-2. Si está `approved`, registra el **Pago**, marca el **cobro pendiente** de la unidad como
-   `PAGADO` y crea un **Movimiento de ingreso conciliado** (Transparencia).
-3. Ignora duplicados (misma referencia `MP-{payment_id}`) y eventos que no sean pagos.
-
-### Configurar la URL del webhook
-
-**Opción recomendada (automática):** define la variable de entorno del backend
-
-```
-BASE_URL = https://TU-API.up.railway.app
-```
-
-ComunApp envía `notification_url` en cada preferencia, así que no hay que configurar
-nada en el panel de Mercado Pago.
-
-**Opción alternativa (global):** en el panel de Mercado Pago →
-*Tu negocio → Configuración → Webhooks* agrega la URL anterior y suscribe
-el evento **Pagos**.
-
-> ⚠️ El webhook es público pero **verifica cada pago contra la API de Mercado Pago**
-> antes de conciliar: un atacante no puede marcar pagos falsos enviando JSON al endpoint.
+El cálculo está centralizado en el frontend (`calcularComision()` en `src/lib/store.ts`) y se replica en el backend (`backend/routers/mp.py`). **Nunca** se cobra solo la base: siempre base + 5%.
 
 ---
 
-## 6. Variables de entorno (Railway → Variables del servicio backend)
+## Dos cuentas de Mercado Pago
 
-| Variable | Valor | Obligatoria |
+Hay dos niveles de configuración, independientes entre sí:
+
+### A) Cuenta de cada comunidad (la configuran sus administradores)
+
+Desde el panel de la comunidad: **Cobros en línea → Configurar Mercado Pago**. Se guardan:
+- **Access Token** (server-side): lo usa el backend para crear cobros y suscripciones.
+- **Public Key** (client-side): la usa el navegador para el punto de pago.
+- **Modo:** `sandbox` (pruebas, tokens que empiezan en `TEST-`) o `producción` (`APP_USR-`).
+
+Con esta cuenta la comunidad:
+- Genera **puntos de pago** por cobro (Checkout Pro).
+- Crea **suscripciones** de pago automático para propietarios y arrendatarios.
+
+### B) Cuenta de la plataforma (la configura el superadmin)
+
+Desde `/adminapp` → pestaña de configuración de la plataforma. Es la cuenta **de ComunApp** y se usa para:
+- Cobrar las **facturas mensuales del SaaS** a cada comunidad (con el 5% incluido).
+- Crear **suscripciones SaaS** para que las comunidades paguen su cuenta automáticamente con tarjeta.
+- Actuar como fallback del webhook de pagos.
+
+> Obtén tus credenciales en el [panel de desarrolladores de Mercado Pago](https://www.mercadopago.cl/developers/panel) → *Tu negocio → Configuración → Credenciales de producción / de prueba*.
+
+---
+
+## Flujo 1: Pago único (Checkout Pro)
+
+1. El administrador genera un cobro (monto, concepto, unidad, correo del pagador).
+2. El backend crea una **preferencia** en Mercado Pago con `external_reference = "comunidad_id|unidad"`, aplicando el total con el 5%.
+3. Se devuelve el **punto de pago** (`init_point`); en sandbox se usa `sandbox_init_point`.
+4. El vecino abre el enlace y paga.
+5. Mercado Pago notifica al **webhook**, que concilia el pago.
+
+## Flujo 2: Pago automático (Preapproval / suscripción)
+
+1. El administrador (o el superadmin, para facturas) crea una suscripción con monto mensual.
+2. El backend crea un **preapproval** en Mercado Pago, restringido a **tarjeta de crédito** (`payment_methods_allowed.payment_types = [credit_card]`), con el total mensual incluido el 5%.
+3. Se devuelve el **link de autorización**; el vecino lo abre y autoriza el cargo con su tarjeta.
+4. Mercado Pago cobra **cada mes automáticamente**.
+5. La suscripción puede **cancelarse** desde el panel (queda `CANCELADA`).
+
+> Los preapproval de pago recurrente **solo aceptan tarjeta de crédito** por política de Mercado Pago — por eso la suscripción está restringida a ese medio.
+
+## Flujo 3: Webhook y conciliación
+
+El webhook público es `POST /api/mp/webhook` (lo llama Mercado Pago; requiere `BASE_URL` configurada).
+
+Cuando llega una notificación de pago:
+1. Se verifica el pago contra la API de Mercado Pago (con el token de plataforma o el de la comunidad).
+2. Si está `approved` y no fue procesado antes (idempotencia por referencia `MP-<payment_id>`):
+   - Se registra el `Pago`.
+   - Se marca `PAGADO` el cobro pendiente más reciente de esa unidad.
+   - Se agrega un `Movimiento` de ingreso ya conciliado (aparece en Transparencia).
+
+---
+
+## Configuración en Railway (backend)
+
+| Variable | Descripción |
+|---|---|
+| `BASE_URL` | URL pública del backend. Necesaria para el `notification_url`/`back_url` del webhook y de los preapproval |
+| `MP_ACCESS_TOKEN` | *(opcional)* token de la plataforma, usado como fallback por el webhook |
+
+Las credenciales de cada comunidad y de la plataforma se guardan en la base (no en variables de entorno), configuradas desde la interfaz.
+
+---
+
+## Probar en sandbox
+
+Usa tokens de prueba (`TEST-...`) y las tarjetas de sandbox de Mercado Pago:
+
+| Resultado | Tarjeta |
+|---|---|
+| Aprobado | `4509 9535 6623 3704` |
+| Rechazado | `4000 0000 0000 0002` |
+| Pendiente | `5031 7557 3453 0604` |
+
+- Vencimiento y CVV: cualquier valor futuro.
+- En sandbox el punto de pago apunta a `sandbox.mercadopago.cl`.
+
+---
+
+## Checklist para pasar a producción
+
+1. [ ] Reemplazar tokens `TEST-` por `APP_USR-` (producción) en cada comunidad.
+2. [ ] Configurar la cuenta de plataforma con tokens de producción.
+3. [ ] Verificar que `BASE_URL` y `FRONTEND_URL` sean las URLs públicas (https).
+4. [ ] Probar un pago real de bajo monto y confirmar la conciliación en Transparencia.
+5. [ ] Revisar en el panel de Mercado Pago que el webhook esté activo.
+
+## Errores comunes
+
+| Error | Causa | Solución |
 |---|---|---|
-| `DATABASE_URL` | la genera Railway al conectar PostgreSQL | sí |
-| `SECRET_KEY` | clave larga aleatoria para los JWT | sí |
-| `CORS_ORIGINS` | `https://TU-FRONTEND.up.railway.app` | sí |
-| `BASE_URL` | `https://TU-API.up.railway.app` (para el webhook) | recomendada |
-| `FRONTEND_URL` | `https://TU-FRONTEND.up.railway.app` (botones de vuelta) | opcional |
-| `MP_ACCESS_TOKEN` | token de la **plataforma** (fallback del webhook) | opcional |
-
----
-
-## 7. Probar sin dinero real (Sandbox)
-
-1. Configura la comunidad con credenciales `TEST-` y modo **Sandbox**.
-2. Genera un cobro → copia el punto de pago → ábrelo.
-3. Inicia sesión con tu cuenta de prueba de Mercado Pago.
-4. Paga con una **tarjeta de prueba**:
-
-| Tarjeta | Número | Resultado |
-|---|---|---|
-| Visa | `4509 9535 6623 3704` | Aprobada |
-| Mastercard | `5031 7557 3453 0604` | Rechazada |
-| Visa | `4000 0000 0000 0002` | Pendiente |
-
-   CVV cualquiera · vencimiento futuro · DNI cualquiera.
-5. El webhook llega igual que en producción y verás el pago conciliado en Transparencia.
-
----
-
-## 8. Pasar a Producción
-
-1. Repite el paso 3 con las credenciales `APP_USR-…` y modo **Producción**.
-2. Vuelve a probar conexión.
-3. Los puntos de pago generados desde ese momento cobran dinero real en la cuenta
-   de la comunidad.
-
----
-
-## 9. Resolución de problemas
-
-| Síntoma | Causa probable | Solución |
-|---|---|---|
-| «Mercado Pago rechazó el Access Token (HTTP 401)» | Token vencido o de otro sitio | Regenera credenciales en el panel MP |
-| El cobro se crea pero no llega el webhook | `BASE_URL` sin definir o URL interna | Define `BASE_URL` con la URL pública de Railway |
-| Pago aprobado no se concilia | `external_reference` sin comunidad | Genera el cobro desde ComunApp (no directo en MP) |
-| Moneda incorrecta | Cuenta de otro país | MP usa la moneda de la cuenta; crea la cuenta en tu país |
-| Error `currency_id` al crear preferencia | No se envía (ComunApp usa la de tu cuenta) | Verifica que el monto sea mayor a 0 |
-
----
-
-## 10. Seguridad (resumen)
-
-- El **Access Token nunca sale del backend**: el navegador solo ve la Public Key y el
-  punto de pago (`init_point`).
-- El webhook **re-verifica cada pago** contra `GET /v1/payments/{id}`.
-- Las credenciales se leen solo con rol `ADMIN` de la propia comunidad (o `SUPERADMIN`).
-- En producción, considera cifrar `mp_access_token` en reposo y rotarlo periódicamente
-  desde el panel de Mercado Pago.
+| "Mercado Pago rechazó el Access Token (HTTP 401)" | Token inválido o vencido | Regenera el token en el panel de desarrolladores |
+| "Configura primero las credenciales…" | La comunidad/plataforma aún no guarda credenciales | Configúralas desde la interfaz antes de cobrar |
+| El webhook no concilia | `BASE_URL` no es pública o la URL no alcanza el backend | Define `BASE_URL` con https y redespliega |
+| La suscripción no acepta débito | Los preapproval solo aceptan crédito | Es el comportamiento esperado |

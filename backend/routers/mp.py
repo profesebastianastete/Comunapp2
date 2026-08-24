@@ -19,10 +19,11 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+import serializers as sz
 from auth import require_roles, usuario_actual
 from config import get_settings
 from database import get_db
-from models import Cobro, Comunidad, Factura, Movimiento, Pago
+from models import Cobro, Comunidad, ConfigPlataforma, Factura, Movimiento, Pago, Suscripcion
 
 router = APIRouter(prefix="/api", tags=["mercado-pago"])
 
@@ -256,6 +257,190 @@ async def cobrar_factura_mp(fid: str, db: Session = Depends(get_db)):
         "comunidad": comu.nombre,
         "modo": modo,
         "creado": datetime.utcnow().isoformat(),
+    }
+
+
+# ── cuenta Mercado Pago de la PLATAFORMA (superadmin) ────────
+def _config(db: Session) -> ConfigPlataforma:
+    cfg = db.get(ConfigPlataforma, 1)
+    if not cfg:
+        cfg = ConfigPlataforma(id=1, conectada=False)
+        db.add(cfg)
+        db.flush()
+    return cfg
+
+
+class ConfigPlataformaIn(BaseModel):
+    access_token: str
+    public_key: str
+    email: str
+
+
+@router.post("/saas/mp-plataforma/configurar",
+             dependencies=[Depends(require_roles("SUPERADMIN"))])
+def configurar_plataforma(body: ConfigPlataformaIn, db: Session = Depends(get_db)):
+    cfg = _config(db)
+    cfg.access_token = body.access_token.strip()
+    cfg.public_key = body.public_key.strip()
+    cfg.email = body.email.strip()
+    cfg.conectada = True
+    cfg.fecha = datetime.utcnow()
+    db.commit()
+    return {"ok": True, "mensaje": "Credenciales de la plataforma guardadas."}
+
+
+@router.post("/saas/mp-plataforma/probar",
+             dependencies=[Depends(require_roles("SUPERADMIN"))])
+async def probar_plataforma(db: Session = Depends(get_db)):
+    cfg = _config(db)
+    if not cfg.access_token:
+        return {"ok": False, "mensaje": "Primero configura el Access Token de la plataforma."}
+    try:
+        async with httpx.AsyncClient(timeout=12) as cli:
+            r = await cli.get(f"{MP_API}/users/me",
+                              headers={"Authorization": f"Bearer {cfg.access_token}"})
+        if r.status_code == 200:
+            me = r.json()
+            es_sandbox = (cfg.access_token or "").startswith("TEST")
+            return {
+                "ok": True,
+                "cuenta": me.get("email") or cfg.email,
+                "site_id": me.get("site_id", ""),
+                "mensaje": ("Conexión correcta en sandbox." if es_sandbox
+                            else "Conexión correcta. La plataforma puede cobrar suscripciones."),
+            }
+        return {"ok": False, "mensaje": f"Mercado Pago rechazó el Access Token (HTTP {r.status_code})."}
+    except httpx.HTTPError:
+        return {"ok": False, "mensaje": "No se pudo contactar a Mercado Pago."}
+
+
+@router.post("/saas/mp-plataforma/desvincular",
+             dependencies=[Depends(require_roles("SUPERADMIN"))])
+def desvincular_plataforma(db: Session = Depends(get_db)):
+    cfg = _config(db)
+    cfg.access_token = None
+    cfg.public_key = None
+    cfg.email = None
+    cfg.conectada = False
+    cfg.fecha = None
+    db.commit()
+    return {"ok": True}
+
+
+# ── suscripciones de pago automático (vecinos / preapproval) ──
+class SuscripcionIn(BaseModel):
+    unidad: str
+    email: str
+    monto: float
+
+
+@router.post("/comunidades/{cid}/suscripciones",
+             dependencies=[Depends(require_roles("ADMIN", "COMITE", "SUPERADMIN"))])
+async def crear_suscripcion(cid: str, body: SuscripcionIn,
+                            payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """Crea una suscripción mensual (preapproval) para que un vecino pague el mes
+    de forma automática con tarjeta de crédito."""
+    _puede_gestionar(payload, cid) if payload.get("rol") in ("ADMIN", "COMITE") else None
+    c = _comunidad(cid, db)
+    if not c.mp_access_token:
+        raise HTTPException(400, "Configura primero las credenciales de Mercado Pago de esta comunidad.")
+    if body.monto <= 0:
+        raise HTTPException(400, "El monto debe ser mayor a 0.")
+
+    com_app = round(body.monto * 0.03)
+    com_mp = round(body.monto * 0.02)
+    total = round(body.monto + com_app + com_mp, 2)
+
+    s = get_settings()
+    pre: dict = {
+        "reason": f"Pagos del mes · {body.unidad}",
+        "auto_recurring": {
+            "frequency": 1, "frequency_type": "months",
+            "transaction_amount": total, "currency_id": "CLP",
+            "payment_methods_allowed": {"payment_types": [{"id": "credit_card"}]},
+        },
+        "external_reference": f"{cid}|{body.unidad}",
+        "payer_email": body.email,
+    }
+    if s.base_url:
+        pre["back_url"] = f"{s.base_url.rstrip('/')}/api/mp/webhook"
+
+    async with httpx.AsyncClient(timeout=15) as cli:
+        r = await cli.post(f"{MP_API}/preapproval", json=pre,
+                           headers={"Authorization": f"Bearer {c.mp_access_token}"})
+    if r.status_code not in (200, 201):
+        raise HTTPException(502, f"Mercado Pago no creó la suscripción (HTTP {r.status_code}): {r.text[:300]}")
+    data = r.json()
+
+    sub = Suscripcion(comunidad_id=cid, unidad=body.unidad, email=body.email,
+                      monto=body.monto, frecuencia="MENSUAL", estado="PENDIENTE",
+                      mp_id=data.get("id"), link_autorizacion=data.get("init_point"))
+    db.add(sub)
+    db.commit()
+    return sz.suscripcion(sub)
+
+
+@router.post("/comunidades/{cid}/suscripciones/{sid}/cancelar",
+             dependencies=[Depends(require_roles("ADMIN", "COMITE", "SUPERADMIN"))])
+def cancelar_suscripcion(cid: str, sid: str,
+                         payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    _puede_gestionar(payload, cid) if payload.get("rol") in ("ADMIN", "COMITE") else None
+    sub = db.query(Suscripcion).filter(Suscripcion.id == sid, Suscripcion.comunidad_id == cid).first()
+    if not sub:
+        raise HTTPException(404, "Suscripción no encontrada.")
+    sub.estado = "CANCELADA"
+    db.commit()
+    return {"ok": True}
+
+
+# ── suscribir una factura SaaS al pago automático (superadmin) ──
+@router.post("/saas/facturas/{fid}/suscribir-mp",
+             dependencies=[Depends(require_roles("SUPERADMIN"))])
+async def suscribir_factura(fid: str, db: Session = Depends(get_db)):
+    """Crea un preapproval para que una comunidad pague su factura mensual automáticamente."""
+    cfg = _config(db)
+    if not cfg.access_token:
+        raise HTTPException(400, "Configura primero la cuenta Mercado Pago de la plataforma.")
+    f = db.get(Factura, fid)
+    if not f:
+        raise HTTPException(404, "Factura no encontrada.")
+    c = db.get(Comunidad, f.comunidad_id)
+
+    com_app = round(f.monto * 0.03)
+    com_mp = round(f.monto * 0.02)
+    total = round(f.monto + com_app + com_mp, 2)
+
+    s = get_settings()
+    pre: dict = {
+        "reason": f"Suscripción {f.plan} · {c.nombre if c else 'Comunidad'}",
+        "auto_recurring": {
+            "frequency": 1, "frequency_type": "months",
+            "transaction_amount": total, "currency_id": "CLP",
+            "payment_methods_allowed": {"payment_types": [{"id": "credit_card"}]},
+        },
+        "external_reference": f"saas|{f.comunidad_id}",
+        "payer_email": cfg.email or "",
+    }
+    if s.base_url:
+        pre["back_url"] = f"{s.base_url.rstrip('/')}/api/mp/webhook"
+
+    async with httpx.AsyncClient(timeout=15) as cli:
+        r = await cli.post(f"{MP_API}/preapproval", json=pre,
+                           headers={"Authorization": f"Bearer {cfg.access_token}"})
+    if r.status_code not in (200, 201):
+        raise HTTPException(502, f"Mercado Pago no creó la suscripción (HTTP {r.status_code}): {r.text[:300]}")
+    data = r.json()
+
+    es_sandbox = (cfg.access_token or "").startswith("TEST")
+    return {
+        "id": data.get("id", ""),
+        "puntoDePago": data.get("init_point", ""),
+        "monto": f.monto,
+        "comisionApp": com_app,
+        "comisionMP": com_mp,
+        "total": total,
+        "creado": datetime.utcnow().isoformat(),
+        "modo": "sandbox" if es_sandbox else "produccion",
     }
 
 

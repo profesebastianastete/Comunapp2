@@ -158,6 +158,7 @@ def datos(cid: str, payload: dict = Depends(usuario_actual), db: Session = Depen
         "votaciones": [sz.votacion(v) for v in db.execute(
             select(Votacion).options(selectinload(Votacion.votos)).where(Votacion.comunidad_id == cid)).scalars().all()],
         "bitacora": todos(RegistroAcceso, sz.acceso),
+        "suscripciones": todos(Suscripcion, sz.suscripcion),
     }
 
 
@@ -661,3 +662,59 @@ def toggle_activo_saas(uid: str, db: Session = Depends(get_db)):
     u.activo = not u.activo
     db.commit()
     return {"activo": u.activo}
+
+
+# ─────────────────── planes dinámicos (superadmin) ───────────────────
+class PlanIn(BaseModel):
+    nombre: str
+    precio: float
+
+
+@router.post("/saas/planes", dependencies=[Depends(require_roles("SUPERADMIN"))])
+def crear_plan(body: PlanIn, db: Session = Depends(get_db)):
+    nombre = body.nombre.strip()
+    if not nombre:
+        raise HTTPException(400, "El nombre del plan es obligatorio.")
+    existe = db.execute(select(Plan).where(func.lower(Plan.nombre) == nombre.lower())).scalar_one_or_none()
+    if existe:
+        raise HTTPException(409, "Ya existe un plan con ese nombre.")
+    p = Plan(nombre=nombre, precio=max(0.0, body.precio), activa=True)
+    db.add(p)
+    db.commit()
+    return sz.plan(p)
+
+
+class PlanPatchIn(BaseModel):
+    nombre: Optional[str] = None
+    precio: Optional[float] = None
+    activa: Optional[bool] = None
+
+
+@router.post("/saas/planes/{pid}", dependencies=[Depends(require_roles("SUPERADMIN"))])
+def actualizar_plan(pid: str, body: PlanPatchIn, db: Session = Depends(get_db)):
+    p = db.get(Plan, pid)
+    if not p:
+        raise HTTPException(404, "Plan no encontrado.")
+    if body.nombre is not None and body.nombre.strip():
+        p.nombre = body.nombre.strip()
+    if body.precio is not None:
+        p.precio = max(0.0, body.precio)
+    if body.activa is not None:
+        p.activa = bool(body.activa)
+    db.commit()
+    return sz.plan(p)
+
+
+@router.delete("/saas/planes/{pid}", dependencies=[Depends(require_roles("SUPERADMIN"))])
+def eliminar_plan(pid: str, db: Session = Depends(get_db)):
+    p = db.get(Plan, pid)
+    if not p:
+        raise HTTPException(404, "Plan no encontrado.")
+    # No permitir borrar un plan que tiene comunidades asignadas
+    en_uso = db.execute(select(func.count()).select_from(Comunidad)
+                        .where(Comunidad.plan == pid)).scalar() or 0
+    if en_uso > 0:
+        raise HTTPException(409, f"No se puede eliminar: {en_uso} comunidad(es) usan este plan.")
+    db.delete(p)
+    db.commit()
+    return {"ok": True}

@@ -2,137 +2,136 @@
 
 **Tu comunidad, administrada en orden.**
 
-ComunApp es una plataforma web para la administración de comunidades de vecinos,
-parcelas y edificios: centraliza los pagos del mes, reservas, votaciones, avisos y
-el control de accesos en un solo lugar, con total transparencia sobre en qué se
-gasta el dinero.
+ComunApp es una plataforma SaaS para administrar comunidades de vecinos, parcelas y edificios: centraliza los pagos del mes, reservas, votaciones, avisos y control de accesos en un solo lugar, con total transparencia sobre en qué se gasta el dinero y cobros en línea vía Mercado Pago.
 
-> 🚀 **Para desplegar en Railway con base de datos PostgreSQL, sigue la
-> [Guía de despliegue](docs/DESPLIEGUE.md).**
+> 🚀 **Modo real único.** La aplicación opera exclusivamente contra su API (FastAPI + PostgreSQL). No existe un "modo demo" con datos en el navegador: todo lo que ves viene de la base de datos.
 
 ---
 
-## ✨ Qué incluye
+## Arquitectura
 
-| Vista | Ruta | Descripción |
+```
+┌──────────────────────┐    HTTPS · JWT     ┌────────────────────┐    SQL     ┌─────────────┐
+│   Frontend (React)   │ ─────────────────▶ │   API (FastAPI)    │ ────────▶  │ PostgreSQL  │
+│   Vite · Tailwind    │   VITE_API_URL     │   Railway          │ DATABASE_URL│  (Railway)  │
+└──────────────────────┘                    └─────────┬──────────┘            └─────────────┘
+                                                      │ HTTPS (cobros, suscripciones, webhook)
+                                                      ▼
+                                              ┌───────────────┐
+                                              │ Mercado Pago  │
+                                              └───────────────┘
+```
+
+- **Multi-tenant:** cada comunidad está aislada por su `comunidad_id` (índices + guardas en cada consulta).
+- **RBAC:** 5 roles — Superadmin (plataforma), Administrador, Comité, Propietario, Arrendatario.
+- **Comisiones:** a cada cobro de Mercado Pago se le suma un **5%** (3% ComunApp + 2% Mercado Pago). Ese total es lo que se cobra.
+
+## Stack
+
+| Capa | Tecnología |
+|---|---|
+| Frontend | React 19 · Vite · Tailwind CSS v4 · Lucide Icons |
+| Tipografías | Bricolage Grotesque · Instrument Sans · Spline Sans Mono |
+| Backend | Python · FastAPI · SQLAlchemy 2.0 · Pydantic v2 |
+| Auth | JWT (`python-jose`) · contraseñas PBKDF2-SHA256 (stdlib) |
+| Base de datos | PostgreSQL (Railway) · SQLite como fallback local |
+| Pagos | Mercado Pago (Checkout Pro + Preapproval + Webhook) |
+
+## Rutas
+
+| Ruta | Vista | Acceso |
 |---|---|---|
-| **Landing** | `/` | Sitio de venta: servicios, cómo funciona y planes |
-| **Ingreso** | `/entrar` | Acceso para todos los roles |
-| **Panel de usuario** | `/dashboard` | Tus Pagos, Pagos del mes, Transparencia, Reservas, Votaciones, Avisos y Bitácora |
-| **Panel interno** | `/adminapp` | Ruta oculta para los dueños del software: tenants, planes, suscripciones, facturación y métricas |
+| `/` | Landing comercial | Público |
+| `/entrar` | Ingreso | Público |
+| `/dashboard` | Panel de usuario final | Sesión requerida |
+| `/adminapp` | Panel interno de la plataforma | **Oculta** · solo Superadmin |
 
-### Módulos destacados
+## Inicio rápido (local)
 
-- **Cobros en línea** — vinculación con Mercado Pago para que propietarios y arrendatarios paguen el mes desde el teléfono.
-- **Pagos automáticos** — suscripciones de Mercado Pago (creadas por administradores o comité) para que el mes se cobre solo con tarjeta de crédito.
-- **Cobro a comunidades** — el superadmin genera los cobros mensuales del SaaS vía Mercado Pago, con comisión de aplicación.
-- **Importar Comunidad** — arrastra un CSV con columnas `Parcela, Propietario, Arrendatario (opcional), Contacto, Correo Electrónico, Deuda` y se crean vecinos, accesos y deudas iniciales.
-- **Transparencia Activa** — el administrador registra gastos e ingresos y los gráficos de la comunidad se actualizan al instante.
-- **Roles con permisos reales** — Superadmin, Administrador, Comité, Propietario y Arrendatario ven exactamente lo que les corresponde.
-
----
-
-## 🗂 Estructura del proyecto
-
-```
-comunapp/
-├── index.html                 # Entrada HTML
-├── railway.toml               # Despliegue del FRONTEND en Railway (Node 22)
-├── server.mjs                 # Servidor estático del frontend (fallback SPA)
-├── src/                       # FRONTEND · React + TypeScript + Tailwind v4
-│   ├── main.tsx               # Bootstrap de React
-│   ├── App.tsx                # Enrutador (/ · /entrar · /dashboard · /adminapp)
-│   ├── index.css              # Sistema de diseño (Tailwind v4)
-│   ├── components/
-│   │   ├── Landing.tsx        # Vista pública de venta
-│   │   ├── Entrar.tsx         # Pantalla de ingreso
-│   │   ├── Dashboard.tsx      # Panel de usuario final
-│   │   ├── DashAdmin.tsx      # Módulos de administración y comité
-│   │   ├── AdminApp.tsx       # Panel interno /adminapp
-│   │   └── ui.tsx             # Componentes compartidos (Lucide)
-│   └── lib/
-│       ├── api.ts             # Cliente HTTP real (habla con la API FastAPI)
-│       └── store.ts           # Datos, roles, RBAC y acciones (API o datos locales)
-├── backend/                   # BACKEND · Python · FastAPI (se despliega en Railway)
-│   ├── railway.toml           # Despliegue del backend (uvicorn)
-│   ├── Procfile               # Alternativa de arranque
-│   ├── requirements.txt       # Dependencias Python
-│   ├── main.py                # Arranque: tablas + bootstrap de datos
-│   ├── config.py              # Variables de entorno
-│   ├── database.py            # SQLAlchemy: PostgreSQL o SQLite
-│   ├── models.py              # Modelo relacional multi-tenant
-│   ├── auth.py                # Hash de contraseñas + JWT + RBAC
-│   ├── seed.py                # Siembra/repara datos (python3 seed.py)
-│   ├── serializers.py         # Conversión ORM → JSON
-│   └── routers/
-│       ├── api.py             # Endpoints: auth, comunidad, SaaS, planes, suscripciones
-│       └── mp.py              # Mercado Pago: credenciales, cobros, webhook, suscripciones
-├── docs/
-│   ├── DESPLIEGUE.md          # ⭐ Guía Railway + PostgreSQL (empieza aquí)
-│   └── MERCADO_PAGO.md        # Configuración de credenciales y cobros MP
-├── scripts/                   # Utilitarios (exportar a GitHub, servir el build)
-├── .env.example               # Plantilla de variables del frontend
-└── .gitignore                 # El backend SÍ se sube; se excluyen caches y secretos
-```
-
----
-
-## 🔑 Cuentas de acceso
-
-Tras el primer arranque (bootstrap) estas cuentas existen en la base:
-
-| Rol | Correo | Contraseña |
-|---|---|---|
-| **Superadmin** (Sebastián Astete) | `equipo@comunapp.cl` | `admin123` |
-| Administrador · Los Álamos | `admin@losalamos.cl` | `admin123` |
-| Comité · Los Álamos | `comite@losalamos.cl` | `comite123` |
-| Propietaria · P-14 | `maria@demo.cl` | `demo123` |
-| Arrendatario · P-07 | `jorge@demo.cl` | `demo123` |
-| Administradora · Torres del Parque | `sofia@torresdelparque.cl` | `admin123` |
-
-> 💡 La ruta `/adminapp` no tiene enlaces públicos: escribe la URL directamente y
-> entra con la cuenta de superadmin.
-
----
-
-## 💻 Desarrollo local
-
-### Frontend
-```bash
-npm install
-npm run dev          # http://localhost:3000
-```
-Sin `VITE_API_URL`, la app opera con datos locales en el navegador (útil para
-diseño y pruebas). Para conectarla a un backend, crea un `.env` en la raíz con
-`VITE_API_URL=http://localhost:8000` y reinicia.
-
-### Backend
+**Backend** (necesita Python 3.10+):
 ```bash
 cd backend
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python3 seed.py                                     # siembra datos en SQLite local
-uvicorn main:app --reload --port 8000               # http://localhost:8000/docs
+python3 seed.py                # siembra datos demo (idempotente)
+python3 -m uvicorn main:app --port 8000
+```
+Sin `DATABASE_URL` usa SQLite (`comunapp.db`). API en `http://127.0.0.1:8000/docs`.
+
+**Frontend** (necesita Node 20+):
+```bash
+npm install
+echo "VITE_API_URL=http://127.0.0.1:8000" > .env.local
+npm run dev
 ```
 
-> 📖 El despliegue completo en Railway (frontend + backend + PostgreSQL) está
-> documentado paso a paso en [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
+## Despliegue en Railway
 
----
+Guía paso a paso en **[docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)**. Resumen:
 
-## 🎨 Stack
+1. **Servicio backend:** carpeta `backend/`, agregar plugin PostgreSQL y definir `SECRET_KEY`, `CORS_ORIGINS`, `BASE_URL`, `FRONTEND_URL`.
+2. **Servicio frontend:** raíz del repo, definir `VITE_API_URL` con la URL pública del backend.
+3. El bootstrap siembra los datos automáticamente en el primer arranque.
 
-- **Frontend:** React 18 · Vite · TypeScript · Tailwind CSS v4 · Lucide Icons
-- **Tipografías:** Bricolage Grotesque · Instrument Sans · Spline Sans Mono
-- **Backend:** Python · FastAPI · SQLAlchemy 2.0 · JWT (python-jose) · PBKDF2
-- **Base de datos:** PostgreSQL (Railway) con fallback a SQLite en local
-- **Pagos:** Mercado Pago (Checkout Pro + suscripciones + webhook)
-- **Infraestructura:** Railway (3 servicios: frontend, backend, PostgreSQL)
+## Credenciales de demostración
 
-## 📖 Glosario de producto
+| Rol | Correo | Contraseña |
+|---|---|---|
+| **Superadmin** (Sebastián Astete) | `equipo@comunapp.cl` | `admin123` |
+| Administrador (Rodrigo Fuentes) | `admin@losalamos.cl` | `admin123` |
+| Comité (Carla Méndez) | `comite@losalamos.cl` | `comite123` |
+| Propietaria (María López · P-14) | `maria@demo.cl` | `demo123` |
+| Arrendatario (Jorge Salas · P-07) | `jorge@demo.cl` | `demo123` |
 
-En todas las vistas de usuario se habla de **«comunidad»** y **«pagos del mes» /
-«tus pagos»**. El lenguaje es simple y directo, sin tecnicismos.
+Detalle y recuperación en **[docs/CREDENCIALES.md](docs/CREDENCIALES.md)**.
+
+## Módulos
+
+- **Cobranza inteligente:** pagos del mes, cuotas y multas, con recordatorios.
+- **Cobros en línea:** Mercado Pago con comisiones del 5% desglosadas.
+- **Pagos automáticos:** suscripciones mensuales (preapproval) solo con tarjeta de crédito.
+- **Transparencia activa:** registro de gastos/ingresos con gráficos en tiempo real.
+- **Importar comunidad:** carga masiva por CSV (parcela, propietario, arrendatario, contacto, correo, deuda).
+- **Reservas, votaciones, muro de avisos y control de acceso.**
+
+## Glosario de producto
+
+En todas las vistas de usuario se habla de **«comunidad»** (nunca "condominio") y **«pagos del mes» / «tus pagos»** (nunca "gastos comunes"). El lenguaje es simple y directo, sin tecnicismos.
+
+## Documentación completa
+
+| Documento | Contenido |
+|---|---|
+| [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md) | Despliegue en Railway (paso a paso + solución de problemas) |
+| [docs/MERCADO_PAGO.md](docs/MERCADO_PAGO.md) | Integración de pagos, comisiones y suscripciones |
+| [docs/API.md](docs/API.md) | Referencia de endpoints de la API |
+| [docs/CREDENCIALES.md](docs/CREDENCIALES.md) | Cuentas, roles y recuperación de contraseñas |
+| [docs/ESCALABILIDAD.md](docs/ESCALABILIDAD.md) | Planes de Railway y límites de usuarios/comunidades |
+
+## Estructura del proyecto
+
+```
+comunapp/
+├── index.html
+├── src/
+│   ├── main.tsx
+│   ├── App.tsx                 # Enrutador (/, /entrar, /dashboard, /adminapp)
+│   ├── index.css               # Sistema de diseño (Tailwind v4)
+│   ├── components/
+│   │   ├── Landing.tsx         # Vista pública
+│   │   ├── Entrar.tsx          # Ingreso
+│   │   ├── Dashboard.tsx       # Panel de usuario final
+│   │   ├── DashAdmin.tsx       # Módulos de admin/comité
+│   │   ├── AdminApp.tsx        # Panel interno /adminapp
+│   │   └── ui.tsx              # Componentes compartidos
+│   └── lib/
+│       ├── store.ts            # Capa de datos (delega en la API)
+│       └── api.ts              # Cliente HTTP real
+├── backend/                    # API FastAPI (Railway)
+│   ├── main.py · auth.py · config.py · database.py · models.py · serializers.py · seed.py
+│   └── routers/ (api.py · mp.py)
+└── docs/                       # Documentación
+```
 
 ---
 

@@ -1,0 +1,69 @@
+=============================================================
+  COMUNAPP — GUÍA RÁPIDA DE INICIO (modo real)
+=============================================================
+
+ComunApp funciona contra su API (FastAPI + PostgreSQL). No hay
+modo demo: todo dato viene de la base de datos.
+
+-------------------------------------------------------------
+1) REQUISITOS
+-------------------------------------------------------------
+  · Python 3.10 o superior   →  python.org  (marca "Add to PATH")
+  · Node 20 o superior       →  nodejs.org
+
+-------------------------------------------------------------
+2) LEVANTAR EL BACKEND (API)
+-------------------------------------------------------------
+  cd backend
+  python3 -m venv .venv
+  source .venv/bin/activate          (Windows: .venv\Scripts\activate)
+  pip install -r requirements.txt
+  python3 seed.py                    (siembra datos demo; seguro de repetir)
+  python3 -m uvicorn main:app --port 8000
+
+  La API queda en:  http://127.0.0.1:8000
+  Documentación:    http://127.0.0.1:8000/docs
+  (Sin DATABASE_URL usa SQLite en backend/comunapp.db)
+
+-------------------------------------------------------------
+3) LEVANTAR EL FRONTEND
+-------------------------------------------------------------
+  (en la raíz del proyecto)
+  npm install
+  Crea un archivo .env.local con esta línea:
+        VITE_API_URL=http://127.0.0.1:8000
+  npm run dev
+
+  Abre el navegador en la URL que te indique Vite
+  (normalmente http://localhost:5173)
+
+-------------------------------------------------------------
+4) CUENTAS DE DEMOSTRACIÓN
+-------------------------------------------------------------
+  SUPERADMIN      equipo@comunapp.cl        admin123
+  ADMINISTRADOR   admin@losalamos.cl        admin123
+  COMITÉ          comite@losalamos.cl       comite123
+  PROPIETARIA     maria@demo.cl             demo123
+  ARRENDATARIO    jorge@demo.cl             demo123
+
+  El superadmin entra al panel interno en la ruta /adminapp
+  (escríbela directo en la URL; no hay enlaces hacia ella).
+
+-------------------------------------------------------------
+5) SI ALGO FALLA
+-------------------------------------------------------------
+  · "Contraseña no reconocida"  →  python3 seed.py --reset-passwords
+  · "No se pudo conectar con el servidor"
+        Revisa que el backend esté corriendo (paso 2) y que
+        VITE_API_URL apunte a http://127.0.0.1:8000
+  · En Railway: sigue docs/DESPLIEGUE.md
+
+-------------------------------------------------------------
+MÁS DOCUMENTACIÓN (carpeta docs/)
+-------------------------------------------------------------
+  DESPLIEGUE.md      Subir a Railway paso a paso
+  MERCADO_PAGO.md    Pagos, comisiones y suscripciones
+  API.md             Referencia de endpoints
+  CREDENCIALES.md    Cuentas, roles y recuperación
+  ESCALABILIDAD.md   Planes de Railway y límites
+=============================================================
