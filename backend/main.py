@@ -10,6 +10,10 @@ from config import get_settings
 from database import Base, SessionLocal, engine
 from routers import api, mp
 
+# Versión del backend. Se expone en /api/diagnostico para confirmar en
+# producción qué código está corriendo (aumenta al hacer cambios).
+BACKEND_VERSION = "2.1-cors"
+
 s = get_settings()
 
 # Crea las tablas al arrancar (en producción real usa Alembic para migraciones).
@@ -61,9 +65,11 @@ app = FastAPI(
 # Bearer tokens (no cookies), así que no se necesitan credenciales CORS.
 _origins = s.cors_list
 if not _origins or "*" in _origins:
+    # Wildcard: acepta cualquier origen. Es seguro porque la autenticación usa
+    # Bearer tokens (no cookies), así que no hay credenciales que proteger con CORS.
     app.add_middleware(
         CORSMiddleware,
-        allow_origin_regex=r"https://[a-z0-9-]+\.(up\.)?railway\.app|http://localhost(:\d+)?",
+        allow_origins=["*"],
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -99,6 +105,9 @@ def diagnostico():
     try:
         return {
             "status": "ok",
+            # Sube este número cuando cambies el backend para confirmar en
+            # producción que la nueva versión está desplegada.
+            "version": BACKEND_VERSION,
             "usuarios": sesion.query(Usuario).count(),
             "comunidades": sesion.query(Comunidad).count(),
             "base": "postgresql" if "postgres" in s.database_url else "sqlite (efímera en Railway)",
