@@ -170,6 +170,36 @@ def garantizar_cuentas_demo(s) -> int:
     return reparadas
 
 
+def asegurar_superadmin(s) -> str:
+    """Garantiza de forma DETERMINISTA que el superadmin exista y pueda entrar.
+
+    Corre en cada arranque (no solo con la base vacía). Tres casos:
+      1. No existe            → se crea con la contraseña demo (PBKDF2).
+      2. Existe con hash malo → se re-hashea con la contraseña demo.
+      3. Existe y verifica    → no se toca.
+
+    Devuelve "creado" | "reparado" | "ok".
+    """
+    from auth import es_hash_legado, hash_password, verify_password
+
+    email, nombre, clave, rol = CUENTAS_DEMO[0]  # el superadmin
+    u = s.query(Usuario).filter_by(email=email).first()
+    if not u:
+        s.add(Usuario(nombre=nombre, email=email, password_hash=hash_password(clave),
+                      rol_global=rol, activo=True))
+        s.commit()
+        return "creado"
+    # Si el hash no verifica con la contraseña demo (antiguo o corrupto), se repara.
+    if not verify_password(clave, u.password_hash) or es_hash_legado(u.password_hash):
+        u.password_hash = hash_password(clave)
+        u.activo = True
+        if u.rol_global != rol:
+            u.rol_global = rol
+        s.commit()
+        return "reparado"
+    return "ok"
+
+
 if __name__ == "__main__":
     reset = "--reset-passwords" in sys.argv[1:]
     Base.metadata.create_all(bind=engine)

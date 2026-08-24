@@ -27,8 +27,9 @@ def bootstrap_datos_iniciales():
     Es idempotente: solo corre cuando no existe ningún usuario.
     """
     from models import Usuario
-    from seed import garantizar_cuentas_demo, seed_all
+    from seed import asegurar_superadmin, garantizar_cuentas_demo, seed_all
 
+    # Bloque 1: sembrado completo de datos demo (solo con la base vacía).
     sesion = SessionLocal()
     try:
         if sesion.query(Usuario).count() == 0:
@@ -37,16 +38,34 @@ def bootstrap_datos_iniciales():
                   "(superadmin: equipo@comunapp.cl / admin123).")
         else:
             print("[bootstrap] Base con datos → no se siembra.")
-
-        # Autoreparación: garantiza que las cuentas demo puedan iniciar sesión.
-        # Re-hashea (a PBKDF2) cualquier cuenta demo que haya quedado con un
-        # hash bcrypt antiguo incompatible. Corre en cada arranque.
-        reparadas = garantizar_cuentas_demo(sesion)
-        if reparadas:
-            print(f"[bootstrap] {reparadas} contraseña(s) demo reparadas a PBKDF2.")
     except Exception as exc:  # la API debe arrancar igual; el error queda en el log
         sesion.rollback()
         print(f"[bootstrap] ERROR al sembrar datos: {exc!r}")
+    finally:
+        sesion.close()
+
+    # Bloque 2: garantía determinista del superadmin. Es independiente del
+    # bloque anterior para correr AUN si el sembrado completo falló.
+    sesion = SessionLocal()
+    try:
+        estado_sa = asegurar_superadmin(sesion)
+        if estado_sa in ("creado", "reparado"):
+            print(f"[bootstrap] Superadmin {estado_sa} (equipo@comunapp.cl / admin123).")
+    except Exception as exc:
+        sesion.rollback()
+        print(f"[bootstrap] ERROR al asegurar el superadmin: {exc!r}")
+    finally:
+        sesion.close()
+
+    # Bloque 3: reparación de hashes legacy de las demás cuentas demo.
+    sesion = SessionLocal()
+    try:
+        reparadas = garantizar_cuentas_demo(sesion)
+        if reparadas:
+            print(f"[bootstrap] {reparadas} contraseña(s) demo reparadas a PBKDF2.")
+    except Exception as exc:
+        sesion.rollback()
+        print(f"[bootstrap] ERROR al reparar cuentas demo: {exc!r}")
     finally:
         sesion.close()
 
