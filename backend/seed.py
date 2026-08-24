@@ -73,73 +73,11 @@ def seed_all(s, reset_passwords: bool = False) -> None:
         s.flush()
         return c
 
-    # ── superadmin + comunidades ──
+    # ── SOLO el superadmin. Sin comunidades ni usuarios demo. ──
+    # El administrador crea las comunidades reales desde el panel y da de alta
+    # a los vecinos, que reciben confirmación por correo.
     for email, nombre, clave, rol_global in CUENTAS_DEMO[:1]:
         usuario(email, nombre, clave, rol_global=rol_global)
-
-    alamos = comunidad("Los Álamos", "Camino El Bosque km 4", "Pucón", 28, "PARCELAS",
-                       mp=True, mp_email="tesoreria@losalamos.cl")
-    torres = comunidad("Torres del Parque", "Av. Los Aromos 1520", "Temuco", 42, "COMITE")
-
-    admin = usuario("admin@losalamos.cl", "Rodrigo Fuentes", "admin123")
-    miembro(admin, alamos, "ADMIN")
-    comite = usuario("comite@losalamos.cl", "Carla Méndez", "comite123")
-    miembro(comite, alamos, "COMITE")
-    maria = usuario("maria@demo.cl", "María López", "demo123")
-    miembro(maria, alamos, "PROPIETARIO", "P-14")
-    jorge = usuario("jorge@demo.cl", "Jorge Salas", "demo123")
-    miembro(jorge, alamos, "ARRENDATARIO", "P-07")
-    sofia = usuario("sofia@torresdelparque.cl", "Sofía Núñez", "admin123")
-    miembro(sofia, torres, "ADMIN")
-
-    # ── cobros del mes + algunos pagos ──
-    unidades = [("P-03", True), ("P-07", True), ("P-14", False), ("P-18", True),
-                ("P-21", False), ("P-25", True)]
-    for un, pagado in unidades:
-        existe = s.query(Cobro).filter_by(comunidad_id=alamos.id, unidad=un, periodo=PERIODO,
-                                          concepto="Pagos del mes").first()
-        if not existe:
-            estado = "PAGADO" if pagado else "PENDIENTE"
-            cb = Cobro(comunidad_id=alamos.id, unidad=un, periodo=PERIODO, concepto="Pagos del mes",
-                       monto=55000, estado=estado, vencimiento=date.today())
-            s.add(cb)
-            s.flush()
-            if pagado:
-                s.add(Pago(comunidad_id=alamos.id, cobro_id=cb.id, unidad=un, monto=55000,
-                           metodo="Mercado Pago", referencia="MP-%s" % un.replace("-", "")))
-                s.add(Movimiento(comunidad_id=alamos.id, fecha=date.today(), tipo="INGRESO",
-                                 categoria="Pagos del mes", descripcion="Pago %s · Pagos del mes" % un,
-                                 monto=55000))
-
-    # ── movimientos de transparencia ──
-    movs = [
-        ("INGRESO", "Pagos del mes", "Recaudación del mes", 220000, 3),
-        ("GASTO", "Mantención", "Poda y jardinería áreas verdes", 85000, 28),
-        ("GASTO", "Servicios", "Electricidad áreas comunes", 46500, 25),
-        ("GASTO", "Personal", "Conserjería y guardia", 140000, 20),
-    ]
-    for tipo, cat, desc, monto, d in movs:
-        existe = s.query(Movimiento).filter_by(comunidad_id=alamos.id, descripcion=desc).first()
-        if not existe:
-            s.add(Movimiento(comunidad_id=alamos.id, fecha=dias(d).date(), tipo=tipo,
-                             categoria=cat, descripcion=desc, monto=monto, conciliado=True))
-
-    # ── avisos ──
-    if not s.query(Aviso).filter_by(comunidad_id=alamos.id, titulo="Pago del mes ya disponible").first():
-        s.add(Aviso(comunidad_id=alamos.id, titulo="Pago del mes ya disponible",
-                    cuerpo="Ya puedes pagar el mes desde tu cuenta con Mercado Pago. Vence el día 10.",
-                    tipo="INFORMATIVO", autor="Comité"))
-
-    # ── facturación SaaS (cobro mensual a cada comunidad) ──
-    for i in range(5, -1, -1):
-        per = (datetime.utcnow() - timedelta(days=30 * i)).strftime("%Y-%m")
-        for c in (alamos, torres):
-            existe = s.query(Factura).filter_by(comunidad_id=c.id, periodo=per).first()
-            if not existe:
-                s.add(Factura(comunidad_id=c.id, periodo=per, plan=NOMBRE[c.plan],
-                              monto=PRECIO[c.plan],
-                              estado="PENDIENTE" if per == PERIODO else "PAGADA",
-                              fecha=datetime.utcnow() - timedelta(days=30 * i)))
 
     s.commit()
 

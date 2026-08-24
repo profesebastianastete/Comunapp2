@@ -1,14 +1,17 @@
 import {
   AlertTriangle, Building2, CheckCircle2, Coins, Copy, CreditCard, DoorOpen, ExternalLink,
-  FileSpreadsheet, KeyRound, Link2, PlugZap, PlusCircle, RefreshCw, Search, ShieldCheck, UploadCloud, Users, Wallet, XCircle,
+  FileDown, FileSpreadsheet, KeyRound, Landmark, Link2, Mail, PlugZap, PlusCircle, RefreshCw,
+  Search, ShieldCheck, UploadCloud, Users, Wallet, XCircle,
 } from "lucide-react";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import {
   calcularComision, cancelarSuscripcion, configurarMP, crearMovimiento, crearSuscripcion, crearVecino,
-  desvincularMP, fmtCLP, fmtFecha, fmtMes, generarMes, importarCSV, marcarSalida, periodoActual,
-  probarMP, registrarAcceso, registrarPagoVecino, ROL_LABEL,
-  type DatosComunidad, type FilaCSV, type Sesion, type Suscripcion,
+  desvincularMP, enviarInforme, fmtCLP, fmtFecha, fmtMes, generarMes, importarCSV, informe, marcarSalida,
+  periodoActual, probarMP, registrarAcceso, registrarPagoVecino, restablecerPassword, ROL_LABEL,
+  setInformeAuto, validarTransferencia as validarTransferenciaFn, verPassword,
+  type DatosComunidad, type FilaCSV, type InformeAPI, type Sesion, type Suscripcion, type Usuario,
 } from "../lib/store";
+import { generarInformePDF } from "../lib/pdf";
 import { Btn, Empty, EstadoTag, Field, Modal, RolTag, Spinner, StatCard, toast } from "./ui";
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -20,7 +23,9 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
   const [fEstado, setFEstado] = useState("todos");
   const [generando, setGenerando] = useState(false);
   const [montoMes, setMontoMes] = useState(55000);
+  const [motivo, setMotivo] = useState("Pagos del mes");
   const [registrando, setRegistrando] = useState<string | null>(null);
+  const [validando, setValidando] = useState<string | null>(null);
 
   const periodos = useMemo(() => {
     const s = new Set(datos.cobros.map((c) => c.periodo));
@@ -38,12 +43,12 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
 
   const generar = async () => {
     setGenerando(true);
-    const r = await generarMes(datos.comunidad.id, periodo, montoMes);
+    const r = await generarMes(datos.comunidad.id, periodo, montoMes, motivo.trim() || "Pagos del mes");
     await recargar();
     setGenerando(false);
     toast(r.creados > 0
-      ? "Pagos del mes generados para " + r.creados + " unidades."
-      : "Este mes ya está generado. No se duplicaron cobros.", r.creados > 0 ? "ok" : "warn");
+      ? "Cobro generado para " + r.creados + " unidades. Se notificó por correo a los vecinos."
+      : "Este cobro ya existe para el periodo. No se duplicó.", r.creados > 0 ? "ok" : "warn");
   };
 
   const registrarPago = async (cobroId: string) => {
@@ -52,6 +57,18 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
     await recargar();
     setRegistrando(null);
     toast("Pago registrado. El estado de cuenta del vecino se actualizó.");
+  };
+
+  const validarTransferencia = async (cobroId: string) => {
+    setValidando(cobroId);
+    try {
+      await validarTransferenciaFn(datos.comunidad.id, cobroId);
+      await recargar();
+      toast("Transferencia validada. El cobro quedó como pagado.");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "No se pudo validar la transferencia.", "warn");
+    }
+    setValidando(null);
   };
 
   return (
@@ -104,13 +121,18 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
                     <td className="tnum px-5 py-3 font-mono text-[13px] font-semibold text-ink">{fmtCLP(c.monto)}</td>
                     <td className="px-5 py-3"><EstadoTag estado={c.estado} /></td>
                     {esAdmin && (
-                      <td className="px-5 py-3 text-right">
+                      <td className="px-5 py-3">
                         {c.estado !== "PAGADO" ? (
-                          <button onClick={() => void registrarPago(c.id)} disabled={registrando === c.id} className="inline-flex items-center gap-1.5 rounded-lg bg-pine px-3 py-1.5 font-mono text-[10.5px] font-bold uppercase tracking-wide text-white transition-colors hover:bg-pine2 disabled:opacity-60">
-                            {registrando === c.id ? <Spinner className="h-3 w-3" /> : <><Coins size={12} /> Registrar pago</>}
-                          </button>
+                          <div className="flex flex-wrap justify-end gap-1.5">
+                            <button onClick={() => void registrarPago(c.id)} disabled={registrando === c.id} title="Registrar pago recibido en efectivo o caja" className="inline-flex items-center gap-1.5 rounded-lg bg-pine px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-white transition-colors hover:bg-pine2 disabled:opacity-60">
+                              {registrando === c.id ? <Spinner className="h-3 w-3" /> : <><Coins size={12} /> Pago</>}
+                            </button>
+                            <button onClick={() => void validarTransferencia(c.id)} disabled={validando === c.id} title="Confirmar una transferencia bancaria recibida" className="inline-flex items-center gap-1.5 rounded-lg border border-pine2/50 px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-pine2 transition-colors hover:bg-pine2 hover:text-white disabled:opacity-60">
+                              {validando === c.id ? <Spinner className="h-3 w-3" /> : <><Landmark size={12} /> Transferencia</>}
+                            </button>
+                          </div>
                         ) : (
-                          <span className="font-mono text-[10.5px] uppercase text-ink3">—</span>
+                          <span className="block text-right font-mono text-[10.5px] uppercase text-ink3">—</span>
                         )}
                       </td>
                     )}

@@ -107,10 +107,22 @@ export interface CobroFacturaMP {
   modo?: "sandbox" | "produccion";
 }
 
+export interface Recursos { reservas: boolean; bitacora: boolean }
 export interface Comunidad {
   id: string; nombre: string; direccion: string; ciudad: string;
   unidades: number; plan: PlanId; creada: string; estado: "ACTIVA" | "SUSPENDIDA";
   vinculacion: Vinculacion;
+  recursos: Recursos;
+  informe_auto: boolean;
+}
+
+/* Informe de finanzas y transparencia (para el PDF y el envío mensual) */
+export interface InformeAPI {
+  comunidad: string;
+  periodo: string;
+  movimientos: { fecha: string; tipo: "INGRESO" | "GASTO"; categoria: string; descripcion: string; monto: number; conciliado?: boolean }[];
+  cobros: { unidad: string; concepto: string; monto: number; estado: string }[];
+  resumen: { ingresos: number; gastos: number; saldo: number; cobrado: number };
 }
 export interface Cobro {
   id: string; comunidadId: string; unidad: string; periodo: string;
@@ -291,8 +303,8 @@ export async function datosComunidad(comunidadId: string): Promise<DatosComunida
 }
 
 /* ── cobranza y pagos ───────────────────────────────────────── */
-export const generarMes = (comunidadId: string, periodo: string, monto: number) =>
-  api.generarMes(comunidadId, periodo, monto);
+export const generarMes = (comunidadId: string, periodo: string, monto: number, motivo = "Pagos del mes") =>
+  api.generarMes(comunidadId, periodo, monto, motivo);
 export const pagarCobro = (comunidadId: string, cobroId: string): Promise<Pago> =>
   api.pagarCobro(comunidadId, cobroId);
 export const registrarPagoVecino = (comunidadId: string, cobroId: string, metodo: string) =>
@@ -371,3 +383,27 @@ export const crearUsuarioSaaS = (data: { nombre: string; email: string; password
   api.crearUsuarioSaaS(data);
 export const setPasswordUsuario = (usuarioId: string, nueva: string) => api.setPasswordUsuario(usuarioId, nueva);
 export const toggleUsuarioActivo = (usuarioId: string): Promise<boolean> => api.toggleUsuarioActivo(usuarioId);
+
+/* confirmación de correo */
+export const confirmarEmail = (token: string) => api.confirmarEmail(token);
+
+/* validación por transferencia */
+export const validarTransferencia = (comunidadId: string, cobroId: string): Promise<Pago> =>
+  api.validarTransferencia(comunidadId, cobroId);
+
+/* informe mensual */
+export const informe = (comunidadId: string, periodo: string): Promise<InformeAPI> =>
+  api.informe(comunidadId, periodo);
+export const enviarInforme = (comunidadId: string, periodo: string, resumenHtml: string) =>
+  api.enviarInforme(comunidadId, periodo, resumenHtml);
+
+/* recursos e informe automático */
+export const setRecursos = (comunidadId: string, recursos: Partial<Recursos>) => api.setRecursos(comunidadId, recursos);
+export const setInformeAuto = (comunidadId: string, activo: boolean) => api.setInformeAuto(comunidadId, activo);
+
+/* usuarios agrupados y contraseñas (superadmin) */
+export const usuariosAgrupados = () => api.usuariosAgrupados();
+export const restablecerPassword = (usuarioId: string): Promise<{ ok: boolean; password_temporal: string }> =>
+  api.restablecerPassword(usuarioId);
+export const verPassword = (usuarioId: string): Promise<{ disponible: boolean; password_temporal: string | null }> =>
+  api.verPassword(usuarioId);

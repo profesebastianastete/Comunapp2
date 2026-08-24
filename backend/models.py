@@ -26,6 +26,11 @@ class Usuario(Base):
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     rol_global: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # SUPERADMIN o None
     creado: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Confirmación de correo para cuentas nuevas
+    email_confirmado: Mapped[bool] = mapped_column(Boolean, default=True)
+    token_confirmacion: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    # Contraseña temporal visible para el admin (la genera "restablecer")
+    password_temporal: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     membresias: Mapped[list["MiembroComunidad"]] = relationship(
         back_populates="usuario", cascade="all, delete-orphan")
@@ -48,6 +53,10 @@ class Comunidad(Base):
     mp_access_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     mp_public_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     mp_modo: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # sandbox | produccion
+    # Recursos activables por el superadmin (JSON: {"reservas":bool,"bitacora":bool})
+    recursos: Mapped[str] = mapped_column(String(200), default='{"reservas":true,"bitacora":true}')
+    # Envío automático mensual del informe de finanzas y transparencia
+    informe_auto: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class MiembroComunidad(Base):

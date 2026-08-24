@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     # URL pública del frontend (para los back_urls del Checkout Pro)
     frontend_url: str = ""
 
+    # Correo (SMTP). Si no está configurado, los mensajes se registran en el log
+    # (útil en desarrollo) y la app sigue funcionando igual.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_pass: str = ""
+    smtp_from: str = "ComunApp <no-responder@comunapp.cl>"
+
     @property
     def cors_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+import mail
 import serializers as sz
 from auth import (comunidad_del_token, crear_token, es_hash_legado, get_usuario_db,
                   hash_password, require_roles, usuario_actual, verify_password)
@@ -44,6 +45,25 @@ def verificar_membresia(db: Session, usuario_id: str, comunidad_id: str) -> Miem
 
 def hoy() -> date:
     return date.today()
+
+
+def fmt_clp(n: float) -> str:
+    return "$" + format(int(round(n)), ",d").replace(",", ".")
+
+
+def correos_miembros(db: Session, cid: str, roles: tuple = ()) -> list[str]:
+    """Correos de los miembros de la comunidad, filtrados por rol (vacío = todos)."""
+    q = (select(Usuario.email)
+         .join(MiembroComunidad, MiembroComunidad.usuario_id == Usuario.id)
+         .where(MiembroComunidad.comunidad_id == cid, Usuario.activo.is_(True)))
+    if roles:
+        q = q.where(MiembroComunidad.rol.in_(roles))
+    return [e for e in db.execute(q).scalars() if e]
+
+
+def _token_confirmacion() -> str:
+    import secrets
+    return secrets.token_urlsafe(24)
 
 
 class LoginIn(BaseModel):
@@ -82,6 +102,8 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Correo o contraseña incorrectos.")
     if not u.activo:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Tu cuenta está desactivada.")
+    if not u.email_confirmado:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Confirma tu correo antes de entrar. Revisa tu bandeja de entrada.")
     # Migración silenciosa: los hashes bcrypt antiguos se re-guardan en PBKDF2
     if es_hash_legado(u.password_hash):
         u.password_hash = hash_password(body.password)
@@ -98,6 +120,22 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
     return {
         "token": token, "usuarioId": u.id, "rol": rol, "comunidadId": cid, "unidad": unidad,
     }
+
+
+class ConfirmarEmailIn(BaseModel):
+    token: str
+
+
+@router.post("/auth/confirmar-email")
+def confirmar_email(body: ConfirmarEmailIn, db: Session = Depends(get_db)):
+    """Activa la cuenta cuando el vecino confirma su correo con el token recibido."""
+    u = db.execute(select(Usuario).where(Usuario.token_confirmacion == body.token)).scalar_one_or_none()
+    if not u:
+        raise HTTPException(400, "El enlace de confirmación no es válido o ya fue usado.")
+    u.email_confirmado = True
+    u.token_confirmacion = None
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/me")
@@ -164,8 +202,9 @@ def datos(cid: str, payload: dict = Depends(usuario_actual), db: Session = Depen
 
 # ─────────────────────────── cobranza ───────────────────────────
 class GenerarMesIn(BaseModel):
-    periodo: str
+    periodo: str       # "YYYY-MM" (el "mes")
     monto: float
+    motivo: str = "Pagos del mes"
 
 
 @router.post("/comunidades/{cid}/cobros/generar", dependencies=[Depends(require_roles(*GESTION))])
@@ -175,18 +214,20 @@ def generar_mes(cid: str, body: GenerarMesIn, payload: dict = Depends(usuario_ac
     unidades = {m.unidad for m in db.execute(
         select(MiembroComunidad).where(MiembroComunidad.comunidad_id == cid, MiembroComunidad.unidad.isnot(None))
     ).scalars()}
-    while len(unidades) < min(c.unidades, 8):
-        unidades.add("U-%02d" % (len(unidades) + 1))
     creados = 0
     for un in unidades:
         existe = db.execute(select(Cobro).where(
             Cobro.comunidad_id == cid, Cobro.unidad == un, Cobro.periodo == body.periodo,
-            Cobro.concepto == "Pagos del mes")).scalar_one_or_none()
+            Cobro.concepto == body.motivo)).scalar_one_or_none()
         if not existe:
             db.add(Cobro(comunidad_id=cid, unidad=un, periodo=body.periodo,
-                         concepto="Pagos del mes", monto=body.monto, vencimiento=hoy()))
+                         concepto=body.motivo, monto=body.monto, vencimiento=hoy()))
             creados += 1
     db.commit()
+    # Notificación por correo a propietarios y arrendatarios
+    if creados > 0:
+        destinatarios = correos_miembros(db, cid, RESIDENTES)
+        mail.correo_nuevo_cobro(destinatarios, c.nombre, body.periodo, fmt_clp(body.monto))
     return {"creados": creados, "periodo": body.periodo}
 
 
@@ -351,6 +392,10 @@ def crear_aviso(cid: str, body: AvisoIn, payload: dict = Depends(usuario_actual)
     a = Aviso(comunidad_id=cid, titulo=body.titulo, cuerpo=body.cuerpo, tipo=body.tipo, autor=body.autor)
     db.add(a)
     db.commit()
+    # Los mensajes del muro se envían por correo a propietarios y arrendatarios
+    c = db.get(Comunidad, cid)
+    destinatarios = correos_miembros(db, cid, RESIDENTES)
+    mail.correo_aviso(destinatarios, c.nombre if c else "tu comunidad", body.titulo, body.cuerpo)
     return sz.aviso(a)
 
 
@@ -465,12 +510,15 @@ def crear_vecino(cid: str, body: VecinoIn, payload: dict = Depends(usuario_actua
     verificar_membresia(db, payload["sub"], cid)
     if db.execute(select(Usuario).where(func.lower(Usuario.email) == body.email.lower())).scalar_one_or_none():
         raise HTTPException(409, "Ya existe una cuenta con ese correo.")
-    u = Usuario(nombre=body.nombre, email=body.email, password_hash=hash_password(body.password))
+    u = Usuario(nombre=body.nombre, email=body.email, password_hash=hash_password(body.password),
+                email_confirmado=False, token_confirmacion=_token_confirmacion())
     db.add(u)
     db.flush()
     db.add(MiembroComunidad(usuario_id=u.id, comunidad_id=cid, rol=body.rol, unidad=body.unidad))
     db.commit()
-    return {"ok": True}
+    # Confirmación de correo para la cuenta nueva
+    mail.correo_confirmacion(u.email, u.nombre, u.token_confirmacion)
+    return {"ok": True, "email_enviado": True}
 
 
 # ─────────────────────────── SaaS / superadmin ───────────────────────────
@@ -628,13 +676,15 @@ def crear_usuario_saas(body: UsuarioSaaSIn, db: Session = Depends(get_db)):
     if len(body.password) < 6:
         raise HTTPException(400, "La contraseña debe tener al menos 6 caracteres.")
     u = Usuario(nombre=body.nombre, email=body.email.strip(),
-                password_hash=hash_password(body.password), rol_global=body.rol_global)
+                password_hash=hash_password(body.password), rol_global=body.rol_global,
+                email_confirmado=False, token_confirmacion=_token_confirmacion())
     db.add(u)
     db.flush()
     for m in body.membresias:
         db.add(MiembroComunidad(usuario_id=u.id, comunidad_id=m.comunidadId, rol=m.rol, unidad=m.unidad))
     db.commit()
-    return {"id": u.id}
+    mail.correo_confirmacion(u.email, u.nombre, u.token_confirmacion)
+    return {"id": u.id, "email_enviado": True}
 
 
 class SetPasswordIn(BaseModel):
@@ -718,3 +768,140 @@ def eliminar_plan(pid: str, db: Session = Depends(get_db)):
     db.delete(p)
     db.commit()
     return {"ok": True}
+
+
+# ─────────────────────────── validación por transferencia ───────────────────────────
+@router.post("/comunidades/{cid}/pagos/validar-transferencia", dependencies=[Depends(require_roles(*GESTION))])
+def validar_transferencia(cid: str, body: dict, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """El admin/comité confirma una transferencia recibida y marca el cobro como pagado."""
+    verificar_membresia(db, payload["sub"], cid)
+    cobro_id = body.get("cobro_id")
+    cb = db.get(Cobro, cobro_id)
+    if not cb or cb.comunidad_id != cid:
+        raise HTTPException(404, "El cobro no existe.")
+    if cb.estado == "PAGADO":
+        raise HTTPException(400, "Este cobro ya está pagado.")
+    cb.estado = "PAGADO"
+    pago = Pago(comunidad_id=cid, cobro_id=cb.id, unidad=cb.unidad, monto=cb.monto,
+                metodo="Transferencia", referencia="TRF-%d" % random.randint(10000, 99999))
+    db.add(pago)
+    db.add(Movimiento(comunidad_id=cid, fecha=hoy(), tipo="INGRESO", categoria=cb.concepto,
+                      descripcion=f"Transferencia validada · {cb.unidad} · {cb.concepto}", monto=cb.monto))
+    db.commit()
+    return sz.pago(pago)
+
+
+# ─────────────────────────── informe mensual ───────────────────────────
+@router.get("/comunidades/{cid}/informe", dependencies=[Depends(require_roles(*GESTION)))
+def informe(cid: str, periodo: str, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """Datos del informe de finanzas y transparencia para un periodo (YYYY-MM)."""
+    verificar_membresia(db, payload["sub"], cid)
+    c = db.get(Comunidad, cid)
+    movs = [sz.movimiento(m) for m in db.execute(
+        select(Movimiento).where(Movimiento.comunidad_id == cid,
+                                 func.strftime("%Y-%m", Movimiento.fecha) == periodo
+                                 if db.bind.dialect.name == "sqlite"
+                                 else func.to_char(Movimiento.fecha, "YYYY-MM") == periodo)
+    ).scalars()]
+    cobros = [sz.cobro(x) for x in db.execute(
+        select(Cobro).where(Cobro.comunidad_id == cid, Cobro.periodo == periodo)).scalars()]
+    ingresos = sum(m["monto"] for m in movs if m["tipo"] == "INGRESO")
+    gastos = sum(m["monto"] for m in movs if m["tipo"] == "GASTO")
+    cobrado = sum(x["monto"] for x in cobros if x["estado"] == "PAGADO")
+    return {
+        "comunidad": c.nombre, "periodo": periodo, "movimientos": movs, "cobros": cobros,
+        "resumen": {"ingresos": ingresos, "gastos": gastos, "saldo": ingresos - gastos, "cobrado": cobrado},
+    }
+
+
+@router.post("/comunidades/{cid}/informe/enviar", dependencies=[Depends(require_roles(*GESTION)))
+def enviar_informe(cid: str, body: dict, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """Envía el informe mensual por correo a propietarios y arrendatarios."""
+    verificar_membresia(db, payload["sub"], cid)
+    c = db.get(Comunidad, cid)
+    periodo = body.get("periodo", datetime.utcnow().strftime("%Y-%m"))
+    resumen_html = body.get("resumen_html", "")
+    destinatarios = correos_miembros(db, cid, RESIDENTES)
+    mail.correo_informe_mensual(destinatarios, c.nombre, periodo, resumen_html)
+    return {"ok": True, "enviados": len(destinatarios)}
+
+
+# ─────────────────────────── recursos e informe automático ───────────────────────────
+class RecursosIn(BaseModel):
+    reservas: Optional[bool] = None
+    bitacora: Optional[bool] = None
+
+
+@router.post("/comunidades/{cid}/recursos", dependencies=[Depends(require_roles("SUPERADMIN")))
+def set_recursos(cid: str, body: RecursosIn, db: Session = Depends(get_db)):
+    """El superadmin activa/desactiva módulos (reservas, registro de entradas) de una comunidad."""
+    c = db.get(Comunidad, cid)
+    if not c:
+        raise HTTPException(404, "Comunidad no encontrada.")
+    try:
+        actual = json.loads(c.recursos or "{}")
+    except Exception:
+        actual = {}
+    if body.reservas is not None:
+        actual["reservas"] = bool(body.reservas)
+    if body.bitacora is not None:
+        actual["bitacora"] = bool(body.bitacora)
+    c.recursos = json.dumps(actual)
+    db.commit()
+    return {"ok": True, "recursos": actual}
+
+
+@router.post("/comunidades/{cid}/informe-auto", dependencies=[Depends(require_roles(*GESTION)))
+def set_informe_auto(cid: str, body: dict, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """Activa/desactiva el envío automático mensual del informe."""
+    verificar_membresia(db, payload["sub"], cid)
+    c = db.get(Comunidad, cid)
+    c.informe_auto = bool(body.get("activo", True))
+    db.commit()
+    return {"ok": True, "informe_auto": c.informe_auto}
+
+
+# ─────────────────────────── usuarios agrupados y contraseñas (superadmin) ───────────────────────────
+@router.get("/saas/usuarios/agrupados", dependencies=[Depends(require_roles("SUPERADMIN"))])
+def usuarios_agrupados(db: Session = Depends(get_db)):
+    """Usuarios agrupados por comunidad (los sin comunidad van en 'sin_comunidad')."""
+    comunidades = db.execute(select(Comunidad)).scalars().all()
+    usuarios = db.execute(select(Usuario).options(selectinload(Usuario.membresias))).scalars().all()
+    grupos = []
+    for c in comunidades:
+        miembros = [u for u in usuarios if any(m.comunidad_id == c.id for m in u.membresias)]
+        grupos.append({"comunidad": sz.comunidad(c), "usuarios": [sz.usuario(u) for u in miembros]})
+    sin_comunidad = [u for u in usuarios if not u.membresias and u.rol_global != "SUPERADMIN"]
+    superadmins = [u for u in usuarios if u.rol_global == "SUPERADMIN"]
+    return {
+        "grupos": grupos,
+        "sin_comunidad": [sz.usuario(u) for u in sin_comunidad],
+        "superadmins": [sz.usuario(u) for u in superadmins],
+    }
+
+
+@router.post("/saas/usuarios/{uid}/restablecer-password", dependencies=[Depends(require_roles("SUPERADMIN")))
+def restablecer_password(uid: str, db: Session = Depends(get_db)):
+    """Genera una contraseña temporal, se la envía por correo al usuario y la devuelve al admin."""
+    u = db.get(Usuario, uid)
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado.")
+    import secrets
+    nueva = secrets.token_urlsafe(6)
+    u.password_hash = hash_password(nueva)
+    u.password_temporal = nueva
+    u.activo = True
+    db.commit()
+    mail.correo_credenciales(u.email, u.nombre, nueva)
+    return {"ok": True, "password_temporal": nueva}
+
+
+@router.get("/saas/usuarios/{uid}/ver-password", dependencies=[Depends(require_roles("SUPERADMIN")))
+def ver_password(uid: str, db: Session = Depends(get_db)):
+    """Devuelve la contraseña temporal vigente (si existe)."""
+    u = db.get(Usuario, uid)
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado.")
+    if u.password_temporal:
+        return {"disponible": True, "password_temporal": u.password_temporal}
+    return {"disponible": False, "password_temporal": None}

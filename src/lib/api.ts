@@ -95,8 +95,8 @@ export async function login(email: string, password: string): Promise<Sesion> {
 export const datosComunidad = (cid: string) => get<import("./store").DatosComunidad>(`/api/comunidades/${cid}/datos`);
 
 /* ─────────────── cobranza ─────────────── */
-export const generarMes = (cid: string, periodo: string, monto: number) =>
-  post<{ creados: number; periodo: string }>(`/api/comunidades/${cid}/cobros/generar`, { periodo, monto });
+export const generarMes = (cid: string, periodo: string, monto: number, motivo = "Pagos del mes") =>
+  post<{ creados: number; periodo: string }>(`/api/comunidades/${cid}/cobros/generar`, { periodo, monto, motivo });
 
 export const pagarCobro = (cid: string, cobroId: string) =>
   post<Pago>(`/api/comunidades/${cid}/pagos/cobro/${cobroId}`);
@@ -219,3 +219,34 @@ export const cobrarFacturaMP = (facturaId: string) =>
   post<{ id: string; puntoDePago: string; monto: number; total: number; comisionApp: number; comisionMP: number; comunidad: string; creado: string; modo?: "sandbox" | "produccion" }>(
     `/api/saas/facturas/${facturaId}/cobrar-mp`,
   );
+
+/* ─────────────── confirmación de correo ─────────────── */
+export const confirmarEmail = (token: string) => post<{ ok: boolean }>("/api/auth/confirmar-email", { token });
+
+/* ─────────────── validación por transferencia ─────────────── */
+export const validarTransferencia = (cid: string, cobroId: string) =>
+  post<import("./store").Pago>(`/api/comunidades/${cid}/pagos/validar-transferencia`, { cobro_id: cobroId });
+
+/* ─────────────── informe mensual ─────────────── */
+export const informe = (cid: string, periodo: string) =>
+  get<import("./store").InformeAPI>(`/api/comunidades/${cid}/informe?periodo=${periodo}`);
+export const enviarInforme = (cid: string, periodo: string, resumenHtml: string) =>
+  post<{ ok: boolean; enviados: number }>(`/api/comunidades/${cid}/informe/enviar`, { periodo, resumen_html: resumenHtml });
+
+/* ─────────────── recursos e informe automático ─────────────── */
+export const setRecursos = (cid: string, recursos: { reservas?: boolean; bitacora?: boolean }) =>
+  post<{ ok: boolean; recursos: { reservas: boolean; bitacora: boolean } }>(`/api/comunidades/${cid}/recursos`, recursos);
+export const setInformeAuto = (cid: string, activo: boolean) =>
+  post<{ ok: boolean; informe_auto: boolean }>(`/api/comunidades/${cid}/informe-auto`, { activo });
+
+/* ─────────────── usuarios agrupados y contraseñas (superadmin) ─────────────── */
+export const usuariosAgrupados = () =>
+  get<{
+    grupos: { comunidad: import("./store").Comunidad; usuarios: import("./store").Usuario[] }[];
+    sin_comunidad: import("./store").Usuario[];
+    superadmins: import("./store").Usuario[];
+  }>("/api/saas/usuarios/agrupados");
+export const restablecerPassword = (uid: string) =>
+  post<{ ok: boolean; password_temporal: string }>(`/api/saas/usuarios/${uid}/restablecer-password`);
+export const verPassword = (uid: string) =>
+  get<{ disponible: boolean; password_temporal: string | null }>(`/api/saas/usuarios/${uid}/ver-password`);

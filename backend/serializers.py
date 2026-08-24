@@ -35,7 +35,18 @@ def comunidad(c) -> dict:
                 "publicKey": c.mp_public_key,
             } if c.mp_conectada else {}),
         },
+        "recursos": _recursos(c),
+        "informe_auto": bool(getattr(c, "informe_auto", True)),
     }
+
+
+def _recursos(c) -> dict:
+    import json as _json
+    try:
+        r = _json.loads(getattr(c, "recursos", "") or "{}")
+    except Exception:
+        r = {}
+    return {"reservas": r.get("reservas", True), "bitacora": r.get("bitacora", True)}
 
 
 def cobro(x) -> dict:

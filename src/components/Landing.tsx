@@ -314,9 +314,9 @@ function Servicios() {
 
 /* ── cómo funciona ──────────────────────────────────────────── */
 const PASOS = [
-  { n: "01", titulo: "Configura tu espacio", texto: "El administrador crea la comunidad con su nombre y unidades. Todo queda seguro y organizado." },
-  { n: "02", titulo: "Invita a tu equipo", texto: "El comité y el administrador reciben sus accesos al instante, cada uno con su nivel de permisos." },
-  { n: "03", titulo: "Tu comunidad en línea", texto: "Los vecinos pagan el mes, reservan espacios y votan desde su teléfono. Tú ves todo en orden." },
+  { n: "01", titulo: "Configura tu espacio y tu equipo", texto: "El administrador crea la comunidad y sus unidades en pocos pasos. Toda la información queda segura y organizada desde el primer día." },
+  { n: "02", titulo: "Tu comunidad siempre conectada", texto: "Tus vecinos pagan su mensualidad, reservan espacios y votan directamente desde su teléfono. Tú mantienes toda la gestión bajo control." },
+  { n: "03", titulo: "El dinero directo en tu cuenta", texto: "Recibe los ingresos de forma íntegra e inmediata. Sin retenciones ni demoras, el dinero va directo a tu cuenta." },
 ];
 function ComoFunciona() {
   return (
@@ -439,11 +439,6 @@ function PlanCard({
           : "border-line bg-card shadow-soft hover:shadow-lift")
       }
     >
-      {destacado && (
-        <span className="absolute -top-3.5 left-7 rounded-full bg-neon px-3.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-deep shadow-neon">
-          El favorito
-        </span>
-      )}
       <h3 className={"font-display text-xl font-bold tracking-tight " + (destacado ? "text-neon" : "text-ink")}>{nombre}</h3>
       <p className={"mt-1 text-[13px] leading-relaxed " + (destacado ? "text-white/70" : "text-ink2")}>{texto}</p>
       <p className="mt-5 flex items-baseline gap-2">
