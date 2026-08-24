@@ -18,7 +18,7 @@ const FALLBACK_PLAN: Record<string, string> = { COMITE: "Comité", PARCELAS: "Co
 const planNombre = (planes: Plan[] | undefined, id: string) =>
   planes?.find((p) => p.id === id)?.nombre ?? FALLBACK_PLAN[id] ?? id;
 
-type Tab = "metricas" | "comunidades" | "usuarios" | "planes" | "suscripciones" | "cobrosmp" | "facturacion" | "config" | "actividad";
+type Tab = "metricas" | "comunidades" | "usuarios" | "planes" | "suscripciones" | "cobrosmp" | "facturacion" | "config" | "ajustes" | "actividad";
 
 interface SaaSData {
   comunidades: {
@@ -76,6 +76,7 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
     { id: "cobrosmp", label: "Cobros MP", icon: PlugZap },
     { id: "facturacion", label: "Facturación", icon: CreditCard },
     { id: "config", label: "Cuenta MP", icon: Settings2 },
+    { id: "ajustes", label: "Ajustes", icon: Pencil },
     { id: "actividad", label: "Eventos", icon: TrendingUp },
   ];
 
@@ -146,6 +147,8 @@ export default function AdminApp({ sesion, salir }: { sesion: Sesion; salir: () 
             <Facturacion data={data} kpis={kpis} refetch={refetch} />
           ) : tab === "config" ? (
             <ConfigMPPlataforma mp={data.mpPlataforma} refetch={refetch} />
+          ) : tab === "ajustes" ? (
+            <Ajustes planes={data.planes} refetch={refetch} />
           ) : (
             <Actividad data={data} />
           )}
@@ -1451,6 +1454,71 @@ function ModalNuevaComunidad({ onClose, onSaved }: { onClose: () => void; onSave
         </div>
       </div>
     </Modal>
+  );
+}
+
+/* ── ajustes: precio de la tarjeta "Comunidades" de la landing ── */
+function Ajustes({ planes, refetch }: { planes: Plan[]; refetch: () => Promise<void> }) {
+  // La tarjeta "Comunidades" de la landing muestra el plan con ese nombre (o el plan de parcelas).
+  const planTarjeta = useMemo(() => {
+    const porNombre = planes.find((p) => p.nombre.toLowerCase().includes("comunidad"));
+    return porNombre ?? planes.find((p) => p.id === "PARCELAS") ?? planes[0] ?? null;
+  }, [planes]);
+
+  const [precio, setPrecio] = useState<number | "">(planTarjeta?.precio ?? "");
+  const [guardando, setGuardando] = useState(false);
+
+  // Sincroniza el input si cambia el plan seleccionado
+  useEffect(() => { setPrecio(planTarjeta?.precio ?? ""); }, [planTarjeta]);
+
+  if (!planTarjeta) {
+    return (
+      <div className="fade-swap rounded-xl border border-white/10 bg-white/[0.03] p-10 text-center">
+        <p className="font-display text-lg font-bold text-white">No hay planes creados</p>
+        <p className="mt-1 text-[13px] text-white/50">Crea un plan en la pestaña «Planes» para poder editar su precio aquí.</p>
+      </div>
+    );
+  }
+
+  const guardar = async () => {
+    if (precio === "" || Number(precio) < 0) { toast("Escribe un precio válido.", "warn"); return; }
+    setGuardando(true);
+    await actualizarPlan(planTarjeta.id, { precio: Number(precio) });
+    await refetch();
+    setGuardando(false);
+    toast("Precio actualizado. La tarjeta «Comunidades» de la landing lo mostrará.");
+  };
+
+  return (
+    <div className="fade-swap space-y-6">
+      <div>
+        <h2 className="flex items-center gap-3 font-display text-2xl font-bold tracking-tight text-white">
+          <span className="grid h-9 w-9 place-items-center rounded-lg bg-neon text-deep"><Pencil size={18} /></span>
+          Ajustes de presentación
+        </h2>
+        <p className="mt-1 font-mono text-[11px] uppercase tracking-wide text-white/40">
+          Lo que cambies aquí se refleja en la página de inicio (landing).
+        </p>
+      </div>
+
+      <div className="max-w-xl rounded-xl border border-white/10 bg-white/[0.03] p-6">
+        <p className="font-mono text-[10.5px] font-bold uppercase tracking-[0.2em] text-white/50">Tarjeta «Comunidades» de la landing</p>
+        <p className="mt-3 text-[13.5px] text-white/70">
+          Plan: <strong className="text-white">{planTarjeta.nombre}</strong>
+        </p>
+        <div className="mt-4 flex items-end gap-3">
+          <Field label="Precio mensual (CLP)">
+            <input className="field w-44" type="number" min={0} step={500} value={precio === "" ? "" : precio} onChange={(e) => setPrecio(e.target.value === "" ? "" : Number(e.target.value))} />
+          </Field>
+          <Btn variant="neon" onClick={() => void guardar()} disabled={guardando}>
+            {guardando ? <Spinner /> : <><CheckCheck size={15} /> Guardar precio</>}
+          </Btn>
+        </div>
+        <p className="mt-4 rounded-lg border border-neon/20 bg-neon/[0.06] px-4 py-3 text-[12.5px] leading-relaxed text-white/60">
+          Vista previa en la landing: <span className="font-display text-[16px] font-bold text-neon">desde {fmtCLP(Number(precio) || 0)}</span> /mes
+        </p>
+      </div>
+    </div>
   );
 }
 

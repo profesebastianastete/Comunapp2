@@ -905,3 +905,25 @@ def ver_password(uid: str, db: Session = Depends(get_db)):
     if u.password_temporal:
         return {"disponible": True, "password_temporal": u.password_temporal}
     return {"disponible": False, "password_temporal": None}
+
+
+# ─────────────────────────── eliminar comunidad (superadmin) ───────────────────────────
+@router.delete("/saas/comunidades/{cid}", dependencies=[Depends(require_roles("SUPERADMIN"))])
+def eliminar_comunidad(cid: str, db: Session = Depends(get_db)):
+    c = db.get(Comunidad, cid)
+    if not c:
+        raise HTTPException(404, "Comunidad no encontrada.")
+    for modelo in (Cobro, Pago, Movimiento, Aviso, Reserva, Votacion,
+                   RegistroAcceso, Suscripcion, Factura, MiembroComunidad):
+        db.execute(modelo.__table__.delete().where(modelo.comunidad_id == cid))
+    db.delete(c)
+    db.commit()
+    return {"ok": True}
+
+
+# ─────────────────────────── planes públicos (landing) ───────────────────────────
+@router.get("/planes-publicos")
+def planes_publicos(db: Session = Depends(get_db)):
+    """Lista de planes activos para mostrar precios en la landing (sin autenticación)."""
+    planes = db.execute(select(Plan).where(Plan.activa == True)).scalars().all()  # noqa: E712
+    return {"planes": [sz.plan(p) for p in planes]}

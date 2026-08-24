@@ -407,3 +407,7 @@ export const restablecerPassword = (usuarioId: string): Promise<{ ok: boolean; p
   api.restablecerPassword(usuarioId);
 export const verPassword = (usuarioId: string): Promise<{ disponible: boolean; password_temporal: string | null }> =>
   api.verPassword(usuarioId);
+
+/* eliminar comunidad y planes públicos */
+export const eliminarComunidad = (comunidadId: string) => api.eliminarComunidad(comunidadId);
+export const planesPublicos = (): Promise<{ planes: Plan[] }> => api.planesPublicos();

@@ -146,19 +146,24 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
 
       {esAdmin && (
         <div className="rounded-2xl border border-dashed border-pine2/40 bg-pine/[0.04] p-6">
-          <h4 className="flex items-center gap-2 font-display text-lg font-bold text-ink"><PlusCircle size={19} className="text-pine2" /> Generar pagos del mes</h4>
-          <p className="mt-1 max-w-xl text-[13px] text-ink2">Crea el cobro de «Pagos del mes» para todas las unidades en el periodo elegido. Si ya existe, no se duplica.</p>
-          <div className="mt-4 flex flex-wrap items-end gap-3">
-            <Field label="Periodo">
-              <select className="field w-48" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
+          <h4 className="flex items-center gap-2 font-display text-lg font-bold text-ink"><PlusCircle size={19} className="text-pine2" /> Generar cobro</h4>
+          <p className="mt-1 max-w-xl text-[13px] text-ink2">
+            Crea un cobro para todas las unidades. Se notificará por correo a propietarios y arrendatarios. Si ya existe para el periodo, no se duplica.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-[160px_1fr_160px_auto] sm:items-end">
+            <Field label="Mes">
+              <select className="field" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
                 {periodos.map((p) => <option key={p} value={p}>{fmtMes(p)}</option>)}
               </select>
             </Field>
+            <Field label="Motivo" hint="ej: Pagos del mes, Cuota extraordinaria">
+              <input className="field" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Pagos del mes" />
+            </Field>
             <Field label="Monto por unidad">
-              <input className="field w-40" type="number" min={0} step={1000} value={montoMes} onChange={(e) => setMontoMes(Number(e.target.value))} />
+              <input className="field" type="number" min={0} step={1000} value={montoMes || ""} onChange={(e) => setMontoMes(Number(e.target.value))} />
             </Field>
             <Btn variant="neon" onClick={() => void generar()} disabled={generando || montoMes <= 0}>
-              {generando ? <Spinner /> : <>Generar para todas las unidades</>}
+              {generando ? <Spinner /> : <>Generar cobro</>}
             </Btn>
           </div>
         </div>
@@ -916,6 +921,111 @@ export function ModuloBitacora({ datos, recargar }: { datos: DatosComunidad; rec
             ))}
           </ul>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ════════ INFORME DE FINANZAS Y TRANSPARENCIA (PDF + correo) ════════ */
+export function ModuloInforme({ datos, recargar }: { datos: DatosComunidad; recargar: () => Promise<void> }) {
+  const [periodo, setPeriodo] = useState(periodoActual());
+  const [descargando, setDescargando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [autoEnvio, setAutoEnvio] = useState(datos.comunidad.informe_auto);
+  const [guardandoAuto, setGuardandoAuto] = useState(false);
+
+  const periodos = useMemo(() => {
+    const s = new Set<string>(datos.movimientos.map((m) => m.fecha.slice(0, 7)));
+    s.add(periodoActual());
+    return [...s].sort().reverse();
+  }, [datos.movimientos]);
+
+  const construir = async (): Promise<InformeAPI> => informe(datos.comunidad.id, periodo);
+
+  const descargar = async () => {
+    setDescargando(true);
+    try {
+      const inf = await construir();
+      generarInformePDF({
+        comunidad: inf.comunidad, periodo: inf.periodo, resumen: inf.resumen,
+        movimientos: inf.movimientos, cobros: inf.cobros,
+      }).save("informe-" + datos.comunidad.nombre.toLowerCase().replace(/\s+/g, "-") + "-" + periodo + ".pdf");
+      toast("Informe PDF descargado.");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "No se pudo generar el informe.", "warn");
+    }
+    setDescargando(false);
+  };
+
+  const enviar = async () => {
+    setEnviando(true);
+    try {
+      const inf = await construir();
+      const resumenHtml =
+        "<p>Resumen de " + fmtMes(inf.periodo) + ":</p><ul>" +
+        "<li><strong>Ingresos:</strong> " + fmtCLP(inf.resumen.ingresos) + "</li>" +
+        "<li><strong>Gastos:</strong> " + fmtCLP(inf.resumen.gastos) + "</li>" +
+        "<li><strong>Saldo:</strong> " + fmtCLP(inf.resumen.saldo) + "</li>" +
+        "<li><strong>Cobrado del mes:</strong> " + fmtCLP(inf.resumen.cobrado) + "</li>" +
+        "</p><p>Adjunta el PDF descargado desde el panel para el detalle completo.</p>";
+      await enviarInforme(datos.comunidad.id, periodo, resumenHtml);
+      toast("Informe enviado por correo a propietarios y arrendatarios.");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "No se pudo enviar el informe.", "warn");
+    }
+    setEnviando(false);
+  };
+
+  const toggleAuto = async () => {
+    setGuardandoAuto(true);
+    const nuevo = !autoEnvio;
+    await setInformeAuto(datos.comunidad.id, nuevo);
+    setAutoEnvio(nuevo);
+    await recargar();
+    setGuardandoAuto(false);
+    toast(nuevo ? "Envío automático mensual activado." : "Envío automático mensual desactivado.", nuevo ? "ok" : "warn");
+  };
+
+  return (
+    <div className="fade-swap space-y-6">
+      <div className="rounded-2xl border border-line bg-card p-6 shadow-soft">
+        <div className="flex items-start gap-4">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-pine/10 text-pine"><FileDown size={22} /></span>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-display text-[22px] font-bold tracking-tight text-ink">Informe de finanzas y transparencia</h3>
+            <p className="mt-1 max-w-2xl text-[13.5px] text-ink2">
+              Genera el informe mensual en PDF con ingresos, gastos, saldo y estado de cobros, o envíalo por correo a toda la comunidad.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-[180px_auto_auto] sm:items-end">
+          <Field label="Periodo">
+            <select className="field" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
+              {periodos.map((p) => <option key={p} value={p}>{fmtMes(p)}</option>)}
+            </select>
+          </Field>
+          <Btn variant="primary" onClick={() => void descargar()} disabled={descargando}>
+            {descargando ? <Spinner /> : <><FileDown size={15} /> Descargar PDF</>}
+          </Btn>
+          <Btn variant="neon" onClick={() => void enviar()} disabled={enviando}>
+            {enviando ? <Spinner /> : <><Mail size={15} /> Enviar por correo</>}
+          </Btn>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-dashed border-pine2/40 bg-pine/[0.04] p-5">
+        <div>
+          <p className="font-display text-lg font-bold text-ink">Envío automático mensual</p>
+          <p className="mt-0.5 text-[13px] text-ink2">Cada mes se enviará el informe por correo a propietarios y arrendatarios, sin que tengas que hacerlo manualmente.</p>
+        </div>
+        <button
+          onClick={() => void toggleAuto()}
+          disabled={guardandoAuto}
+          aria-pressed={autoEnvio}
+          className={"relative h-8 w-14 shrink-0 rounded-full transition-colors " + (autoEnvio ? "bg-pine" : "bg-line")}
+        >
+          <span className={"absolute top-1 h-6 w-6 rounded-full bg-white shadow transition-all " + (autoEnvio ? "left-7" : "left-1")} />
+        </button>
       </div>
     </div>
   );

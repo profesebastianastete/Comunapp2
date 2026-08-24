@@ -250,3 +250,9 @@ export const restablecerPassword = (uid: string) =>
   post<{ ok: boolean; password_temporal: string }>(`/api/saas/usuarios/${uid}/restablecer-password`);
 export const verPassword = (uid: string) =>
   get<{ disponible: boolean; password_temporal: string | null }>(`/api/saas/usuarios/${uid}/ver-password`);
+
+/* ─────────────── eliminar comunidad y planes públicos ─────────────── */
+export const eliminarComunidad = (cid: string) =>
+  del<{ ok: boolean }>(`/api/saas/comunidades/${cid}`);
+export const planesPublicos = () =>
+  get<{ planes: import("./store").Plan[] }>("/api/planes-publicos");

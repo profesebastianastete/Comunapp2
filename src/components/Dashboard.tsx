@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, BellRing, CalendarDays, CheckCircle2, Download, KeyRound, Megaphone, PieChart,
+  AlertTriangle, BellRing, CalendarDays, CheckCircle2, Download, FileDown, KeyRound, Megaphone, PieChart,
   Receipt, RefreshCw, ShieldCheck, Vote, Wallet, Wrench,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -9,10 +9,11 @@ import {
   type Aviso, type Cobro, type DatosComunidad, type Pago, type Reserva, type Sesion, type Votacion,
 } from "../lib/store";
 import { Btn, Empty, EstadoTag, Field, Logo, Modal, ModalCambiarPassword, RolTag, Spinner, toast } from "./ui";
-import { FormMovimiento, ModuloBitacora, ModuloCobranza, ModuloPagosMes, ModuloSuscripciones, ModuloVecinos } from "./DashAdmin";
+import { FormMovimiento, ModuloBitacora, ModuloCobranza, ModuloInforme, ModuloPagosMes, ModuloSuscripciones, ModuloVecinos } from "./DashAdmin";
+import { generarReciboPDF } from "../lib/pdf";
 
 type Modulo =
-  | "tus-pagos" | "historial" | "transparencia" | "avisos" | "reservas" | "votaciones"
+  | "tus-pagos" | "historial" | "transparencia" | "informe" | "avisos" | "reservas" | "votaciones"
   | "pagos-mes" | "cobranza" | "suscripciones" | "vecinos" | "bitacora";
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -54,6 +55,7 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
     return [
       { id: "pagos-mes", label: "Pagos del mes", icon: Wallet },
       { id: "transparencia", label: esAdmin ? "Transparencia Activa" : "Transparencia", icon: PieChart },
+      { id: "informe", label: "Informe mensual", icon: FileDown },
       { id: "cobranza", label: "Cobros en línea", icon: Receipt },
       { id: "suscripciones", label: "Pagos automáticos", icon: RefreshCw },
       { id: "avisos", label: "Muro de avisos", icon: Megaphone },
@@ -166,6 +168,8 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
             <ModuloHistorial datos={datos} sesion={sesion} />
           ) : modulo === "transparencia" ? (
             <ModuloTransparencia datos={datos} esAdmin={esAdmin} recargar={recargar} />
+          ) : modulo === "informe" ? (
+            <ModuloInforme datos={datos} recargar={recargar} />
           ) : modulo === "avisos" ? (
             <ModuloAvisos datos={datos} puedePublicar={!esResidente} autor={usuario.nombre} recargar={recargar} />
           ) : modulo === "reservas" ? (
@@ -360,27 +364,18 @@ function ModalPago({ datos, cobros, onClose, recargar }: { datos: DatosComunidad
   );
 }
 
-export function descargarRecibo(p: Pago, comunidad: string) {
-  const texto = [
-    "═══════════════════════════════",
-    "  Comprobante de pago · ComunApp",
-    "═══════════════════════════════",
-    "",
-    "Comunidad : " + comunidad,
-    "Unidad    : " + p.unidad,
-    "Monto     : " + fmtCLP(p.monto),
-    "Método    : " + p.metodo,
-    "Referencia: " + p.referencia,
-    "Fecha     : " + fmtFechaHora(p.fecha),
-    "",
-    "Gracias por mantener tu comunidad en orden.",
-  ].join("\n");
-  const blob = new Blob([texto], { type: "text/plain;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "recibo-" + p.referencia + ".txt";
-  a.click();
-  URL.revokeObjectURL(a.href);
+export function descargarRecibo(p: Pago, comunidad: string, residente = "Vecino/a", concepto = "Pagos del mes") {
+  // Recibo en formato PDF (antes era .txt)
+  generarReciboPDF({
+    comunidad,
+    unidad: p.unidad,
+    residente,
+    concepto,
+    monto: p.monto,
+    metodo: p.metodo,
+    referencia: p.referencia,
+    fecha: p.fecha,
+  }).save("recibo-" + p.referencia + ".pdf");
 }
 
 /* ═══════════════════ HISTORIAL ═══════════════════ */
