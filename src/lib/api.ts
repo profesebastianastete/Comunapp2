@@ -66,9 +66,12 @@ async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
     }
   }
   void ultimoError;
+  // Incluye la URL intentada para facilitar el diagnóstico (CORS, URL incorrecta,
+  // servicio dormido o sin dominio público).
   throw new ApiError(
     0,
-    "No se pudo conectar con el servidor. Puede estar en reposo o sin conexión: espera unos segundos y vuelve a intentar.",
+    "No se pudo conectar con el servidor en " + (API_URL ?? "(sin URL)") +
+    ". Puede estar en reposo o sin conexión: espera unos segundos y vuelve a intentar.",
     true,
   );
 }
