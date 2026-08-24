@@ -7,7 +7,7 @@ import {
   actualizarPlan, calcularComision, cobrarFacturaMP, configurarMPPlataforma, crearComunidadSaaS,
   crearPlan, crearUsuarioSaaS, desvincularMPPlataforma, eliminarPlan, fmtCLP, fmtFecha, fmtMes,
   generarCobroMP, generarFacturasMes, listadoSaaS, marcarFacturaPagada, probarMPPlataforma,
-  ROL_LABEL, setPasswordUsuario, suscribirFacturaMP, toggleEstadoComunidad, toggleUsuarioActivo,
+  ROL_LABEL, setRecursos, setPasswordUsuario, suscribirFacturaMP, toggleEstadoComunidad, toggleUsuarioActivo,
   usuarioActual,
   type CobroFacturaMP, type CobroMP, type MPPlataforma, type Plan, type PlanId, type RolCondo, type Sesion, type Suscripcion,
 } from "../lib/store";
@@ -25,6 +25,8 @@ interface SaaSData {
     id: string; nombre: string; direccion: string; ciudad: string; unidades: number;
     plan: PlanId; creada: string; estado: "ACTIVA" | "SUSPENDIDA";
     usuarios: number; cobrosMes: number; recaudado: number;
+    recursos: { reservas: boolean; bitacora: boolean };
+    informe_auto?: boolean;
     vinculacion: {
       conectada: boolean;
       email?: string;
@@ -471,11 +473,27 @@ function UsuariosSaaS({ data, comunidades, refetch }: {
   const [passDe, setPassDe] = useState<SaaSData["usuarios"][number] | null>(null);
   const [nuevo, setNuevo] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [vista, setVista] = useState<"plana" | "agrupada">("agrupada");
 
   const nombreComu = (id: string) => comunidades.find((c) => c.id === id)?.nombre ?? id.slice(0, 6);
 
   const filtrados = data.usuarios.filter((u) =>
     (u.nombre + " " + u.email).toLowerCase().includes(q.toLowerCase()));
+
+  // Agrupar usuarios por comunidad (primera membresía; superadmins y sin membresía van aparte)
+  const grupos = useMemo(() => {
+    const porComunidad = new Map<string, SaaSData["usuarios"]>();
+    const plataforma: SaaSData["usuarios"] = [];
+    const sinComunidad: SaaSData["usuarios"] = [];
+    for (const u of filtrados) {
+      if (u.rolGlobal === "SUPERADMIN") { plataforma.push(u); continue; }
+      if (u.membresias.length === 0) { sinComunidad.push(u); continue; }
+      const cid = u.membresias[0].comunidadId;
+      if (!porComunidad.has(cid)) porComunidad.set(cid, []);
+      porComunidad.get(cid)!.push(u);
+    }
+    return { porComunidad, plataforma, sinComunidad };
+  }, [filtrados]);
 
   const toggle = async (u: SaaSData["usuarios"][number]) => {
     setBusy(u.id);
@@ -497,19 +515,56 @@ function UsuariosSaaS({ data, comunidades, refetch }: {
             {data.usuarios.length} cuentas · redefine contraseñas y activa o suspende accesos
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-2.5">
+        <div className="ml-auto flex flex-wrap items-center gap-2.5">
           <div className="relative">
             <input
-              className="field h-10! w-56! border-white/15 bg-white/[0.05] pl-9 text-[13px] text-white placeholder:text-white/30"
+              className="field h-10! w-48! border-white/15 bg-white/[0.05] pl-9 text-[13px] text-white placeholder:text-white/30 sm:w-56!"
               placeholder="Buscar por nombre o correo…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
             <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
           </div>
+          <div className="flex rounded-lg border border-white/15 bg-white/[0.04] p-0.5">
+            {(["agrupada", "plana"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setVista(v)}
+                className={"rounded-md px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide transition-colors " +
+                  (vista === v ? "bg-neon text-deep" : "text-white/50 hover:text-white")}
+              >
+                {v === "agrupada" ? "Por comunidad" : "Lista"}
+              </button>
+            ))}
+          </div>
           <Btn variant="neon" onClick={() => setNuevo(true)}><UserPlus size={15} /> Nuevo usuario</Btn>
         </div>
       </div>
+
+      {vista === "agrupada" ? (
+        <div className="space-y-6">
+          {/* Plataforma (superadmins) */}
+          {grupos.plataforma.length > 0 && (
+            <SeccionUsuarios titulo="Plataforma" sub="Acceso global a ComunApp" usuarios={grupos.plataforma}
+              toggle={toggle} busy={busy} setPassDe={setPassDe} />
+          )}
+          {/* Por comunidad */}
+          {[...grupos.porComunidad.entries()].map(([cid, usuarios]) => (
+            <SeccionUsuarios key={cid} titulo={nombreComu(cid)} sub={usuarios.length + " miembro(s)"}
+              usuarios={usuarios} toggle={toggle} busy={busy} setPassDe={setPassDe} />
+          ))}
+          {/* Sin comunidad */}
+          {grupos.sinComunidad.length > 0 && (
+            <SeccionUsuarios titulo="Sin comunidad asignada" sub="Cuentas sin membresía"
+              usuarios={grupos.sinComunidad} toggle={toggle} busy={busy} setPassDe={setPassDe} />
+          )}
+          {filtrados.length === 0 && (
+            <p className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-10 text-center font-mono text-[12px] text-white/40">
+              Sin resultados para “{q}”.
+            </p>
+          )}
+        </div>
+      ) : (
 
       <div className="dark-scroll overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03]">
         <table className="w-full min-w-[760px] border-collapse text-left">
@@ -577,6 +632,7 @@ function UsuariosSaaS({ data, comunidades, refetch }: {
           </tbody>
         </table>
       </div>
+      )}
 
       {passDe && (
         <ModalSetPassword
@@ -593,6 +649,67 @@ function UsuariosSaaS({ data, comunidades, refetch }: {
         />
       )}
     </div>
+  );
+}
+
+/* Sección de usuarios agrupada por comunidad */
+function SeccionUsuarios({ titulo, sub, usuarios, toggle, busy, setPassDe }: {
+  titulo: string; sub: string; usuarios: SaaSData["usuarios"];
+  toggle: (u: SaaSData["usuarios"][number]) => Promise<void>;
+  busy: string | null;
+  setPassDe: (u: SaaSData["usuarios"][number]) => void;
+}) {
+  return (
+    <section className="rounded-xl border border-white/10 bg-white/[0.03]">
+      <header className="flex items-center justify-between gap-3 border-b border-white/10 px-5 py-3.5">
+        <div>
+          <h3 className="font-display text-lg font-bold tracking-tight text-white">{titulo}</h3>
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/40">{sub}</p>
+        </div>
+        <span className="rounded-full bg-neon/15 px-3 py-1 font-mono text-[11px] font-bold text-neon">{usuarios.length}</span>
+      </header>
+      <div className="grid gap-2.5 p-4 sm:grid-cols-2 xl:grid-cols-3">
+        {usuarios.map((u) => (
+          <div key={u.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] p-3.5 transition-colors hover:border-neon/40">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-neon/15 font-display text-[13px] font-bold text-neon">
+              {u.nombre.split(" ").map((p) => p[0]).slice(0, 2).join("")}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className={"truncate text-[13px] font-semibold " + (u.activo ? "text-white" : "text-white/40 line-through")}>{u.nombre}</p>
+              <p className="truncate font-mono text-[10px] text-white/40">{u.email}</p>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              <button onClick={() => setPassDe(u)} title="Contraseña"
+                className="grid h-7 w-7 place-items-center rounded-md border border-neon/40 text-neon transition-colors hover:bg-neon hover:text-deep">
+                <KeyRound size={12} />
+              </button>
+              <button disabled={busy === u.id} onClick={() => void toggle(u)} title={u.activo ? "Suspender" : "Activar"}
+                className="grid h-7 w-7 place-items-center rounded-md border border-white/20 text-white/60 transition-colors hover:border-signal hover:text-signal disabled:opacity-50">
+                {busy === u.id ? <Spinner className="h-3 w-3" /> : <Power size={12} />}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* Interruptor compacto para activar/desactivar un recurso de la comunidad */
+function ToggleRecurso({ activo, busy, label, title, onToggle }: {
+  activo: boolean; busy: boolean; label: string; title: string; onToggle: (v: boolean) => void;
+}) {
+  return (
+    <button
+      disabled={busy}
+      title={title + (activo ? " · activado" : " · desactivado")}
+      onClick={() => onToggle(!activo)}
+      className={"flex items-center gap-1 rounded-md border px-2 py-1 font-mono text-[9px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50 " +
+        (activo ? "border-neon/50 bg-neon/10 text-neon" : "border-white/15 text-white/35 hover:border-white/40 hover:text-white/60")}
+    >
+      {busy ? <Spinner className="h-2.5 w-2.5" /> : <span className={"h-1.5 w-1.5 rounded-full " + (activo ? "bg-neon" : "bg-white/25")} />}
+      {label}
+    </button>
   );
 }
 
@@ -1118,6 +1235,15 @@ function ConfigMPPlataforma({ mp, refetch }: { mp: MPPlataforma; refetch: () => 
 /* ── tenants ── */
 function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Promise<void>; nueva: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const [recBusy, setRecBusy] = useState<string | null>(null);
+
+  const toggleRecurso = async (cid: string, clave: "reservas" | "bitacora", valor: boolean) => {
+    setRecBusy(cid + ":" + clave);
+    await setRecursos(cid, { [clave]: valor });
+    await refetch();
+    setRecBusy(null);
+    toast((clave === "reservas" ? "Reservas" : "Registro de entradas") + (valor ? " activado." : " desactivado."), valor ? "ok" : "warn");
+  };
 
   return (
     <div className="fade-swap space-y-5">
@@ -1139,6 +1265,7 @@ function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Prom
               <th className="px-5 py-3.5">Cobros del mes</th>
               <th className="px-5 py-3.5">Volumen total</th>
               <th className="px-5 py-3.5">MP</th>
+              <th className="px-5 py-3.5">Recursos</th>
               <th className="px-5 py-3.5">Estado</th>
               <th className="px-5 py-3.5 text-right">Acción</th>
             </tr>
@@ -1158,6 +1285,14 @@ function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Prom
                   {c.vinculacion.conectada
                     ? <span className="rounded-full bg-neon/20 px-2 py-0.5 font-mono text-[9.5px] font-bold uppercase text-neon">online</span>
                     : <span className="rounded-full bg-white/10 px-2 py-0.5 font-mono text-[9.5px] font-bold uppercase text-white/40">offline</span>}
+                </td>
+                <td className="px-5 py-4">
+                  <div className="flex gap-1.5">
+                    <ToggleRecurso activo={c.recursos.reservas} busy={recBusy === c.id + ":reservas"} label="Res" title="Reservas de espacios"
+                      onToggle={(v) => void toggleRecurso(c.id, "reservas", v)} />
+                    <ToggleRecurso activo={c.recursos.bitacora} busy={recBusy === c.id + ":bitacora"} label="Acc" title="Registro de entradas"
+                      onToggle={(v) => void toggleRecurso(c.id, "bitacora", v)} />
+                  </div>
                 </td>
                 <td className="px-5 py-4"><EstadoTag estado={c.estado} /></td>
                 <td className="px-5 py-4 text-right">

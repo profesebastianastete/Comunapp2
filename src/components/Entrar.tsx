@@ -1,7 +1,7 @@
-import { ArrowRight, Building2, Eye, EyeOff, Lock, ShieldAlert } from "lucide-react";
+import { ArrowRight, Building2, CheckCircle2, Eye, EyeOff, KeyRound, Lock, MailCheck, ShieldAlert } from "lucide-react";
 import { useState } from "react";
-import { login, type Sesion } from "../lib/store";
-import { Btn, Field, Logo, Spinner } from "./ui";
+import { confirmarEmail, login, type Sesion } from "../lib/store";
+import { Btn, Field, Logo, Spinner, toast } from "./ui";
 
 export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => void; volver: () => void }) {
   const [email, setEmail] = useState("");
@@ -11,20 +11,44 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
   const [sinServidor, setSinServidor] = useState(false);
   const [cargando, setCargando] = useState(false);
 
+  // Confirmación de correo para cuentas nuevas
+  const [necesitaConfirmar, setNecesitaConfirmar] = useState(false);
+  const [token, setToken] = useState("");
+  const [confirmando, setConfirmando] = useState(false);
+
   const entrar = async () => {
     if (!email || !pass) { setError("Escribe tu correo y contraseña."); setSinServidor(false); return; }
     setError(null);
     setSinServidor(false);
+    setNecesitaConfirmar(false);
     setCargando(true);
     try {
       const s = await login(email, pass);
       onLogin(s);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "No se pudo iniciar sesión.");
+      const msg = e instanceof Error ? e.message : "No se pudo iniciar sesión.";
+      setError(msg);
       // El cliente marca los errores de red (servidor caído o en reposo)
-      setSinServidor(e instanceof Error && /servidor|conectar/i.test(e.message));
+      setSinServidor(/servidor|conectar/i.test(msg));
+      // El backend pide confirmar el correo para cuentas nuevas
+      if (/confirma tu correo/i.test(msg)) setNecesitaConfirmar(true);
       setCargando(false);
     }
+  };
+
+  const confirmar = async () => {
+    if (!token.trim()) { setError("Pega el código de confirmación que recibiste por correo."); return; }
+    setError(null);
+    setConfirmando(true);
+    try {
+      await confirmarEmail(token.trim());
+      toast("Correo confirmado. Ya puedes entrar.");
+      setNecesitaConfirmar(false);
+      setToken("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "El código no es válido.");
+    }
+    setConfirmando(false);
   };
 
   return (
@@ -84,6 +108,29 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
             </Btn>
           </form>
 
+          {/* Panel de confirmación de correo (cuentas nuevas) */}
+          {necesitaConfirmar && (
+            <div className="pop-in mt-5 rounded-xl border border-pine2/40 bg-pine/[0.05] p-5">
+              <p className="flex items-center gap-2 font-mono text-[10.5px] font-bold uppercase tracking-[0.18em] text-pine2">
+                <MailCheck size={15} /> Un paso más: confirma tu correo
+              </p>
+              <p className="mt-2 text-[12.5px] leading-relaxed text-ink2">
+                Tu cuenta es nueva. Revisa tu bandeja de entrada y pega aquí el código de confirmación que te enviamos.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <input
+                  className="field font-mono text-[12.5px] tracking-wide"
+                  placeholder="Código de confirmación"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                />
+                <Btn variant="neon" onClick={() => void confirmar()} disabled={confirmando}>
+                  {confirmando ? <Spinner /> : <><KeyRound size={14} /> Confirmar</>}
+                </Btn>
+              </div>
+            </div>
+          )}
+
           <p className="mt-6 border-t border-dashed border-line pt-5 text-center text-[12px] leading-relaxed text-ink3">
             ¿No tienes cuenta? Pídela al administrador de tu comunidad:
             <br />él crea tu acceso con tu rol y tu unidad.
@@ -91,7 +138,7 @@ export default function Entrar({ onLogin, volver }: { onLogin: (s: Sesion) => vo
         </div>
 
         <div className="mt-6 flex items-center justify-center gap-6 font-mono text-[10px] uppercase tracking-[0.16em] text-ink3">
-          <span className="flex items-center gap-1.5"><Lock size={12} className="text-pine2" /> Sesión segura</span>
+          <span className="flex items-center gap-1.5"><CheckCircle2 size={12} className="text-pine2" /> Correo verificado</span>
           <span className="flex items-center gap-1.5"><Building2 size={12} className="text-pine2" /> Tu comunidad, tus datos</span>
           <span className="hidden items-center gap-1.5 sm:flex"><Lock size={12} className="text-pine2" /> Pagos con Mercado Pago</span>
         </div>

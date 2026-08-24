@@ -46,12 +46,14 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
         { id: "transparencia" as Modulo, label: "Transparencia", icon: PieChart },
         { id: "avisos" as Modulo, label: "Muro de avisos", icon: Megaphone },
       ];
+      const recursos = datos?.comunidad.recursos ?? { reservas: true, bitacora: true };
       if (sesion.rol === "PROPIETARIO") {
-        base.push({ id: "reservas" as Modulo, label: "Reservas", icon: CalendarDays });
+        if (recursos.reservas) base.push({ id: "reservas" as Modulo, label: "Reservas", icon: CalendarDays });
         base.push({ id: "votaciones" as Modulo, label: "Votaciones", icon: Vote });
       }
       return base;
     }
+    const recursos = datos?.comunidad.recursos ?? { reservas: true, bitacora: true };
     return [
       { id: "pagos-mes", label: "Pagos del mes", icon: Wallet },
       { id: "transparencia", label: esAdmin ? "Transparencia Activa" : "Transparencia", icon: PieChart },
@@ -59,12 +61,19 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
       { id: "cobranza", label: "Cobros en línea", icon: Receipt },
       { id: "suscripciones", label: "Pagos automáticos", icon: RefreshCw },
       { id: "avisos", label: "Muro de avisos", icon: Megaphone },
-      { id: "reservas", label: "Reservas", icon: CalendarDays },
+      ...(recursos.reservas ? [{ id: "reservas" as Modulo, label: "Reservas", icon: CalendarDays }] : []),
       { id: "votaciones", label: "Votaciones", icon: Vote },
       ...(esAdmin ? [{ id: "vecinos" as Modulo, label: "Vecinos", icon: ShieldCheck }] : []),
-      { id: "bitacora", label: "Control de acceso", icon: ShieldCheck },
+      ...(recursos.bitacora ? [{ id: "bitacora" as Modulo, label: "Control de acceso", icon: ShieldCheck }] : []),
     ];
-  }, [esResidente, esAdmin, sesion.rol]);
+  }, [esResidente, esAdmin, sesion.rol, datos]);
+
+  // Si el módulo activo fue desactivado (ej: superadmin apagó Reservas), volver al módulo por defecto
+  useEffect(() => {
+    if (nav.length > 0 && !nav.some((n) => n.id === modulo)) {
+      setModulo(esResidente ? "tus-pagos" : "pagos-mes");
+    }
+  }, [nav, modulo, esResidente]);
 
   if (!usuario) {
     // Sesión huérfana (cuenta eliminada, datos reiniciados o caché antigua):
@@ -99,20 +108,24 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
             <p className="truncate font-display text-[15px] font-bold leading-tight text-ink">{datos?.comunidad.nombre ?? "Tu comunidad"}</p>
             <p className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink3">{datos?.comunidad.ciudad} · {datos?.comunidad.unidades} unidades</p>
           </div>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
             <div className="hidden text-right md:block">
               <p className="text-[12.5px] font-semibold leading-tight text-ink">{usuario.nombre}</p>
               <p className="font-mono text-[9.5px] uppercase tracking-wide text-ink3">{sesion.unidad ?? ROL_LABEL[sesion.rol]}</p>
             </div>
-            <RolTag rol={sesion.rol} label={ROL_LABEL[sesion.rol]} />
+            <span className="hidden sm:block"><RolTag rol={sesion.rol} label={ROL_LABEL[sesion.rol]} /></span>
             <button
               onClick={() => setModalPass(true)}
               title="Cambiar contraseña"
+              aria-label="Cambiar contraseña"
               className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-card text-ink2 transition-all hover:-translate-y-0.5 hover:border-pine hover:text-pine hover:shadow-soft"
             >
               <KeyRound size={15} />
             </button>
-            <Btn variant="ghost" size="sm" onClick={salir}>Salir</Btn>
+            <Btn variant="ghost" size="sm" onClick={salir} title="Salir">
+              <span className="hidden sm:inline">Salir</span>
+              <span className="sm:hidden" aria-label="Salir">⎋</span>
+            </Btn>
           </div>
         </div>
       </header>
