@@ -14,8 +14,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 60 * 12  # 12 horas
 
-    # CORS: separa por coma los orígenes permitidos (la URL pública del frontend)
-    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    # CORS: orígenes permitidos, separados por coma.
+    # "*" (default seguro) = cualquier *.up.railway.app + http://localhost:puerto,
+    # que cubre Railway y desarrollo local sin configurar nada.
+    # Para restringir, lista orígenes exactos:
+    #   CORS_ORIGINS=https://comunapp.up.railway.app
+    cors_origins: str = "*"
 
     # Mercado Pago (opcional, para cobros reales)
     mp_access_token: str = ""  # token de la PLATAFORMA (recibe webhooks si las comunidades no tienen propio)

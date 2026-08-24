@@ -56,13 +56,27 @@ app = FastAPI(
 )
 
 # CORS: permite que el frontend (servido en otra URL) llame a esta API.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=s.cors_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Por defecto ("*") acepta cualquier *.up.railway.app y localhost, para que el
+# despliegue en Railway funcione sin configurar nada. La autenticación usa
+# Bearer tokens (no cookies), así que no se necesitan credenciales CORS.
+_origins = s.cors_list
+if not _origins or "*" in _origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"https://[a-z0-9-]+\.(up\.)?railway\.app|http://localhost(:\d+)?",
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Lista explícita de orígenes: comportamiento estricto.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(api.router)
 app.include_router(mp.router)  # Mercado Pago: credenciales, cobros y webhook
