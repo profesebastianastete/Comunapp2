@@ -59,6 +59,17 @@ modo demo: todo dato viene de la base de datos.
   · En Railway: sigue docs/DESPLIEGUE.md
 
 -------------------------------------------------------------
+PRODUCCIÓN EN RAILWAY (URLs vigentes)
+-------------------------------------------------------------
+  Frontend   https://comunapp-comunap.up.railway.app
+  Backend    https://backend-comunapp.up.railway.app
+  Salud      https://backend-comunapp.up.railway.app/health
+  Diagnóstico https://backend-comunapp.up.railway.app/api/diagnostico
+
+  El frontend usa la variable VITE_API_URL =
+  https://backend-comunapp.up.railway.app (redeploy tras cambiarla).
+
+-------------------------------------------------------------
 MÁS DOCUMENTACIÓN (carpeta docs/)
 -------------------------------------------------------------
   DESPLIEGUE.md      Subir a Railway paso a paso

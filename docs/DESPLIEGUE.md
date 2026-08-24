@@ -61,7 +61,7 @@ Haz push a GitHub (puedes usar `exportar-a-github.sh` / `.bat`).
 
 | Variable | Valor |
 |---|---|
-| `VITE_API_URL` | la URL pública del **backend** (ej. `https://comunapp-backend.up.railway.app`) |
+| `VITE_API_URL` | la URL pública del **backend** — en producción: `https://backend-comunapp.up.railway.app` |
 
 > ⚠️ `VITE_API_URL` se inyecta **en el build**. Si la defines o cambias después, haz **Deploy → Redeploy** del frontend.
 
@@ -75,9 +75,9 @@ Cada servicio: **Settings → Networking → Generate Domain**. Anota:
 - URL del backend → va en `VITE_API_URL` y `BASE_URL`.
 - URL del frontend → va en `FRONTEND_URL` (y en `CORS_ORIGINS` solo si decides restringir).
 
-Ejemplo final de `CORS_ORIGINS` (admite varias, separadas por coma):
+Ejemplo final de `CORS_ORIGINS` (admite varias, separadas por coma) — en producción ComunApp usa el default `*`:
 ```
-https://comunapp-frontend.up.railway.app
+https://comunapp-comunap.up.railway.app
 ```
 
 ---
