@@ -25,18 +25,34 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
   const [modulo, setModulo] = useState<Modulo | null>(null);
   const [modalPass, setModalPass] = useState(false);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [cargaLenta, setCargaLenta] = useState(false);
 
   const esResidente = sesion.rol === "PROPIETARIO" || sesion.rol === "ARRENDATARIO";
   const esAdmin = sesion.rol === "ADMIN";
 
   const recargar = async () => {
-    if (!sesion.comunidadId) return;
+    // Sin comunidad no hay nada que cargar: mostrar un mensaje claro en vez de
+    // dejar el spinner girando para siempre.
+    if (!sesion.comunidadId) {
+      setDatos(null);
+      setErrorCarga(
+        "Tu cuenta no tiene una comunidad asociada en esta sesión. " +
+        "Vuelve a entrar; si el problema sigue, contacta a quien administra tu comunidad.",
+      );
+      return;
+    }
     setErrorCarga(null);
+    setCargaLenta(false);
+    // Si la carga demora, avisar que el servidor puede estar despertando
+    // (el plan gratuito de Railway duerme el servicio tras inactividad).
+    const tLento = window.setTimeout(() => setCargaLenta(true), 2500);
     try {
       setDatos(await datosComunidad(sesion.comunidadId));
     } catch (e) {
       setDatos(null);
       setErrorCarga(e instanceof Error ? e.message : "Error inesperado al cargar la comunidad.");
+    } finally {
+      window.clearTimeout(tLento);
     }
   };
   useEffect(() => { void recargar(); }, [sesion.comunidadId, sesion.token]);
@@ -194,9 +210,22 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
                 </Btn>
               </div>
             ) : (
-              <div className="flex items-center justify-center gap-3 py-28 text-ink2">
-                <Spinner className="h-5 w-5" />
-                <span className="font-mono text-[12px] uppercase tracking-[0.16em]">Cargando tu comunidad…</span>
+              <div className="flex flex-col items-center justify-center gap-3 py-28 text-ink2">
+                <div className="flex items-center gap-3">
+                  <Spinner className="h-5 w-5" />
+                  <span className="font-mono text-[12px] uppercase tracking-[0.16em]">Cargando tu comunidad…</span>
+                </div>
+                {cargaLenta && (
+                  <p className="ticker-in max-w-sm text-center text-[12.5px] leading-relaxed text-ink3">
+                    Está tomando más de lo usual: el servidor puede estar <strong className="text-ink2">despertando del reposo</strong> (plan gratuito).
+                    Espera unos segundos; si no carga, usa <em>Reintentar</em> más abajo.
+                  </p>
+                )}
+                {cargaLenta && (
+                  <Btn variant="ghost" size="sm" onClick={() => void recargar()}>
+                    <RefreshCw size={13} /> Reintentar ahora
+                  </Btn>
+                )}
               </div>
             )
           ) : modulo === "tus-pagos" ? (
