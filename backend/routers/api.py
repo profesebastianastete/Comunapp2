@@ -793,7 +793,7 @@ def validar_transferencia(cid: str, body: dict, payload: dict = Depends(usuario_
 
 
 # ─────────────────────────── informe mensual ───────────────────────────
-@router.get("/comunidades/{cid}/informe", dependencies=[Depends(require_roles(*GESTION)))
+@router.get("/comunidades/{cid}/informe", dependencies=[Depends(require_roles(*GESTION))])
 def informe(cid: str, periodo: str, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
     """Datos del informe de finanzas y transparencia para un periodo (YYYY-MM)."""
     verificar_membresia(db, payload["sub"], cid)
@@ -815,7 +815,7 @@ def informe(cid: str, periodo: str, payload: dict = Depends(usuario_actual), db:
     }
 
 
-@router.post("/comunidades/{cid}/informe/enviar", dependencies=[Depends(require_roles(*GESTION)))
+@router.post("/comunidades/{cid}/informe/enviar", dependencies=[Depends(require_roles(*GESTION))])
 def enviar_informe(cid: str, body: dict, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
     """Envía el informe mensual por correo a propietarios y arrendatarios."""
     verificar_membresia(db, payload["sub"], cid)
@@ -833,7 +833,7 @@ class RecursosIn(BaseModel):
     bitacora: Optional[bool] = None
 
 
-@router.post("/comunidades/{cid}/recursos", dependencies=[Depends(require_roles("SUPERADMIN")))
+@router.post("/comunidades/{cid}/recursos", dependencies=[Depends(require_roles("SUPERADMIN"))])
 def set_recursos(cid: str, body: RecursosIn, db: Session = Depends(get_db)):
     """El superadmin activa/desactiva módulos (reservas, registro de entradas) de una comunidad."""
     c = db.get(Comunidad, cid)
@@ -852,7 +852,7 @@ def set_recursos(cid: str, body: RecursosIn, db: Session = Depends(get_db)):
     return {"ok": True, "recursos": actual}
 
 
-@router.post("/comunidades/{cid}/informe-auto", dependencies=[Depends(require_roles(*GESTION)))
+@router.post("/comunidades/{cid}/informe-auto", dependencies=[Depends(require_roles(*GESTION))])
 def set_informe_auto(cid: str, body: dict, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
     """Activa/desactiva el envío automático mensual del informe."""
     verificar_membresia(db, payload["sub"], cid)
@@ -881,7 +881,7 @@ def usuarios_agrupados(db: Session = Depends(get_db)):
     }
 
 
-@router.post("/saas/usuarios/{uid}/restablecer-password", dependencies=[Depends(require_roles("SUPERADMIN")))
+@router.post("/saas/usuarios/{uid}/restablecer-password", dependencies=[Depends(require_roles("SUPERADMIN"))])
 def restablecer_password(uid: str, db: Session = Depends(get_db)):
     """Genera una contraseña temporal, se la envía por correo al usuario y la devuelve al admin."""
     u = db.get(Usuario, uid)
@@ -897,7 +897,7 @@ def restablecer_password(uid: str, db: Session = Depends(get_db)):
     return {"ok": True, "password_temporal": nueva}
 
 
-@router.get("/saas/usuarios/{uid}/ver-password", dependencies=[Depends(require_roles("SUPERADMIN")))
+@router.get("/saas/usuarios/{uid}/ver-password", dependencies=[Depends(require_roles("SUPERADMIN"))])
 def ver_password(uid: str, db: Session = Depends(get_db)):
     """Devuelve la contraseña temporal vigente (si existe)."""
     u = db.get(Usuario, uid)
