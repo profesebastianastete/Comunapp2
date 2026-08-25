@@ -56,6 +56,10 @@ modo demo: todo dato viene de la base de datos.
   · "No se pudo conectar con el servidor"
         Revisa que el backend esté corriendo (paso 2) y que
         VITE_API_URL apunte a http://127.0.0.1:8000
+  · El dashboard se queda en "Cargando tu comunidad…" o da error
+        de base de datos (columna faltante) tras un despliegue:
+            python3 migrate.py
+        (agrega las columnas nuevas que falten; es idempotente)
   · En Railway: sigue docs/DESPLIEGUE.md
 
 -------------------------------------------------------------

@@ -24,12 +24,20 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
   const [datos, setDatos] = useState<DatosComunidad | null>(null);
   const [modulo, setModulo] = useState<Modulo | null>(null);
   const [modalPass, setModalPass] = useState(false);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
 
   const esResidente = sesion.rol === "PROPIETARIO" || sesion.rol === "ARRENDATARIO";
   const esAdmin = sesion.rol === "ADMIN";
 
   const recargar = async () => {
-    if (sesion.comunidadId) setDatos(await datosComunidad(sesion.comunidadId));
+    if (!sesion.comunidadId) return;
+    setErrorCarga(null);
+    try {
+      setDatos(await datosComunidad(sesion.comunidadId));
+    } catch (e) {
+      setDatos(null);
+      setErrorCarga(e instanceof Error ? e.message : "Error inesperado al cargar la comunidad.");
+    }
   };
   useEffect(() => { void recargar(); }, [sesion.comunidadId, sesion.token]);
 
@@ -171,10 +179,26 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
         {/* contenido */}
         <main className="min-w-0">
           {!datos ? (
-            <div className="flex items-center justify-center gap-3 py-28 text-ink2">
-              <Spinner className="h-5 w-5" />
-              <span className="font-mono text-[12px] uppercase tracking-[0.16em]">Cargando tu comunidad…</span>
-            </div>
+            errorCarga ? (
+              <div className="mx-auto max-w-lg py-20 text-center">
+                <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-signal/40 bg-signal/10 text-signal">
+                  <AlertTriangle size={24} />
+                </span>
+                <p className="mt-5 font-display text-xl font-bold text-ink">No se pudo cargar tu comunidad</p>
+                <p className="mx-auto mt-2 max-w-md text-[13.5px] leading-relaxed text-ink2">{errorCarga}</p>
+                <p className="mt-2 font-mono text-[10.5px] uppercase tracking-wide text-ink3">
+                  Si acaba de haber un despliegue, espera 10 segundos y reintenta.
+                </p>
+                <Btn variant="primary" className="mt-6" onClick={() => void recargar()}>
+                  <RefreshCw size={15} /> Reintentar
+                </Btn>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-3 py-28 text-ink2">
+                <Spinner className="h-5 w-5" />
+                <span className="font-mono text-[12px] uppercase tracking-[0.16em]">Cargando tu comunidad…</span>
+              </div>
+            )
           ) : modulo === "tus-pagos" ? (
             <ModuloTusPagos datos={datos} sesion={sesion} recargar={recargar} />
           ) : modulo === "historial" ? (
