@@ -20,15 +20,16 @@ PERIODO = datetime.utcnow().strftime("%Y-%m")
 PRECIO = {"COMITE": 0, "PARCELAS": 29900, "CUSTOM": 89000}
 NOMBRE = {"COMITE": "Comité", "PARCELAS": "Comunidad de Parcelas", "CUSTOM": "Personalizado"}
 
-# Cuentas demo: (email, nombre, contraseña, rol_global)
+# Cuenta inicial de la plataforma: (email, nombre, contraseña, rol_global).
+# Ya NO se siembran comunidades ni vecinos demo: el administrador crea las
+# comunidades reales desde el panel y da de alta a sus vecinos.
 CUENTAS_DEMO = [
     ("equipo@comunapp.cl", "Sebastian Astete", "admin123", "SUPERADMIN"),
-    ("admin@losalamos.cl", "Rodrigo Fuentes", "admin123", None),
-    ("comite@losalamos.cl", "Carla Méndez", "comite123", None),
-    ("maria@demo.cl", "María López", "demo123", None),
-    ("jorge@demo.cl", "Jorge Salas", "demo123", None),
-    ("sofia@torresdelparque.cl", "Sofía Núñez", "admin123", None),
 ]
+
+# Datos demo históricos (para limpiarlos de bases antiguas con --clean-demo)
+_NOMBRES_DEMO = ["Los Álamos", "Torres del Parque"]
+_EMAILS_DEMO = ("@demo.cl", "@losalamos.cl", "@torresdelparque.cl")
 
 
 def seed_all(s, reset_passwords: bool = False) -> None:
@@ -138,14 +139,47 @@ def asegurar_superadmin(s) -> str:
     return "ok"
 
 
+def limpiar_demo(s) -> dict:
+    """Elimina las comunidades y usuarios demo de bases antiguas.
+
+    Útil cuando la base se sembró con datos de demostración y se quiere partir
+    limpio creando solo comunidades reales. Nunca toca al superadmin.
+    """
+    from models import (Aviso, Cobro, Factura, MiembroComunidad, Movimiento, Pago,
+                        RegistroAcceso, Reserva, Suscripcion, Votacion)
+
+    resultado = {"comunidades": 0, "usuarios": 0}
+    coms = s.query(Comunidad).filter(Comunidad.nombre.in_(_NOMBRES_DEMO)).all()
+    for c in coms:
+        for modelo in (Cobro, Pago, Movimiento, Aviso, Reserva, Votacion,
+                       RegistroAcceso, Suscripcion, Factura, MiembroComunidad):
+            s.query(modelo).filter(modelo.comunidad_id == c.id).delete(synchronize_session=False)
+        s.query(Comunidad).filter(Comunidad.id == c.id).delete(synchronize_session=False)
+        resultado["comunidades"] += 1
+
+    usuarios = s.query(Usuario).filter(Usuario.rol_global.is_(None)).all()
+    for u in usuarios:
+        if any(k in (u.email or "").lower() for k in _EMAILS_DEMO):
+            s.query(MiembroComunidad).filter(MiembroComunidad.usuario_id == u.id).delete(synchronize_session=False)
+            s.query(Usuario).filter(Usuario.id == u.id).delete(synchronize_session=False)
+            resultado["usuarios"] += 1
+
+    s.commit()
+    return resultado
+
+
 if __name__ == "__main__":
     reset = "--reset-passwords" in sys.argv[1:]
+    clean = "--clean-demo" in sys.argv[1:]
     Base.metadata.create_all(bind=engine)
     sesion = SessionLocal()
     try:
+        if clean:
+            r = limpiar_demo(sesion)
+            print(f"[clean-demo] Eliminadas {r['comunidades']} comunidad(es) y "
+                  f"{r['usuarios']} usuario(s) demo.")
         seed_all(sesion, reset_passwords=reset)
     finally:
         sesion.close()
-    print("Datos demo sembrados correctamente" + (" (contraseñas restauradas)." if reset else "."))
+    print("Datos iniciales listos" + (" (contraseñas restauradas)." if reset else "."))
     print("Credenciales:  equipo@comunapp.cl / admin123 (superadmin)")
-    print("               admin@losalamos.cl / admin123   ·   maria@demo.cl / demo123")

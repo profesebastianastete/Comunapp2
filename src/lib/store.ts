@@ -66,6 +66,7 @@ export interface Membresia { comunidadId: string; rol: RolCondo; unidad?: string
 export interface Usuario {
   id: string; nombre: string; email: string; password: string;
   activo: boolean; creado: string; rolGlobal: "SUPERADMIN" | null; membresias: Membresia[];
+  telefono?: string;
 }
 export interface Vinculacion {
   conectada: boolean;
@@ -340,7 +341,7 @@ export const registrarAcceso = (comunidadId: string, data: { visitante: string; 
 export const marcarSalida = (comunidadId: string, registroId: string) => api.marcarSalida(comunidadId, registroId);
 
 /* ── gestión de vecinos (admin) ─────────────────────────────── */
-export const crearVecino = (comunidadId: string, data: { nombre: string; email: string; password: string; rol: RolCondo; unidad?: string }) =>
+export const crearVecino = (comunidadId: string, data: { nombre: string; email: string; password: string; rol: RolCondo; unidad?: string; telefono?: string }) =>
   api.crearVecino(comunidadId, data);
 
 /* ── suscripciones de pago automático ───────────────────────── */

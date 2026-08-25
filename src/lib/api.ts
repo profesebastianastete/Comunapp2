@@ -151,7 +151,7 @@ export const marcarSalida = (cid: string, registroId: string) =>
   post<{ ok: boolean }>(`/api/comunidades/${cid}/accesos/${registroId}/salida`);
 
 /* ─────────────── vecinos ─────────────── */
-export const crearVecino = (cid: string, data: { nombre: string; email: string; password: string; rol: string; unidad?: string }) =>
+export const crearVecino = (cid: string, data: { nombre: string; email: string; password: string; rol: string; unidad?: string; telefono?: string }) =>
   post<{ ok: boolean }>(`/api/comunidades/${cid}/vecinos`, data);
 
 /* ─────────────── cuenta ─────────────── */

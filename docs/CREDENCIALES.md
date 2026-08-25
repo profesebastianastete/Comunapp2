@@ -1,24 +1,22 @@
 # Credenciales y roles
 
-Cuentas de demostración que siembra `backend/seed.py` (y el bootstrap en el primer arranque). Son idempotentes: repetir el seed no las duplica.
+ComunApp **ya no siembra comunidades ni vecinos demo**: solo existe la cuenta del superadmin. Las comunidades reales las crea el administrador desde el panel, y cada vecino recibe un **correo de confirmación** al ser dado de alta.
 
-## Cuentas demo
+## Cuenta inicial
 
-| Rol | Nombre | Correo | Contraseña | Comunidad / Unidad |
+| Rol | Nombre | Correo | Contraseña | Acceso |
 |---|---|---|---|---|
-| **Superadmin** | Sebastián Astete | `equipo@comunapp.cl` | `admin123` | — (toda la plataforma) |
-| Administrador | Rodrigo Fuentes | `admin@losalamos.cl` | `admin123` | Los Álamos |
-| Comité | Carla Méndez | `comite@losalamos.cl` | `comite123` | Los Álamos |
-| Propietaria | María López | `maria@demo.cl` | `demo123` | Los Álamos · P-14 |
-| Arrendatario | Jorge Salas | `jorge@demo.cl` | `demo123` | Los Álamos · P-07 |
-| Administradora | Sofía Núñez | `sofia@torresdelparque.cl` | `admin123` | Torres del Parque |
+| **Superadmin** | Sebastián Astete | `equipo@comunapp.cl` | `admin123` | Panel interno `/adminapp` |
 
-## Comunidades demo
+## Limpieza de datos demo antiguos
 
-| Comunidad | Ciudad | Unidades | Plan |
-|---|---|---|---|
-| Los Álamos | Pucón | 28 | Comunidad de Parcelas |
-| Torres del Parque | Temuco | 42 | Comité |
+Si tu base viene de un despliegue antiguo (con "Los Álamos" / "Torres del Parque" y cuentas `@demo.cl`), elimínalos con:
+
+```bash
+python3 seed.py --clean-demo
+```
+
+También puedes eliminar cualquier comunidad desde el panel del superadmin (pestaña **Tenants** → botón **Eliminar**).
 
 ## Qué puede hacer cada rol
 

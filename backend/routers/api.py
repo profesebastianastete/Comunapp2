@@ -503,6 +503,7 @@ class VecinoIn(BaseModel):
     password: str
     rol: str
     unidad: Optional[str] = None
+    telefono: Optional[str] = None
 
 
 @router.post("/comunidades/{cid}/vecinos", dependencies=[Depends(require_roles("ADMIN"))])
@@ -511,7 +512,7 @@ def crear_vecino(cid: str, body: VecinoIn, payload: dict = Depends(usuario_actua
     if db.execute(select(Usuario).where(func.lower(Usuario.email) == body.email.lower())).scalar_one_or_none():
         raise HTTPException(409, "Ya existe una cuenta con ese correo.")
     u = Usuario(nombre=body.nombre, email=body.email, password_hash=hash_password(body.password),
-                email_confirmado=False, token_confirmacion=_token_confirmacion())
+                email_confirmado=False, token_confirmacion=_token_confirmacion(), telefono=body.telefono)
     db.add(u)
     db.flush()
     db.add(MiembroComunidad(usuario_id=u.id, comunidad_id=cid, rol=body.rol, unidad=body.unidad))

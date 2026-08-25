@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, Building2, CheckCircle2, Coins, Copy, CreditCard, DoorOpen, ExternalLink,
+  AlertTriangle, Building2, CheckCircle2, Coins, Copy, CreditCard, DoorOpen, ExternalLink, Eye,
   FileDown, FileSpreadsheet, KeyRound, Landmark, Link2, Mail, PlugZap, PlusCircle, RefreshCw,
   Search, ShieldCheck, UploadCloud, Users, Wallet, XCircle,
 } from "lucide-react";
@@ -770,8 +770,9 @@ export function ModuloSuscripciones({ datos, recargar }: { datos: DatosComunidad
 export function ModuloVecinos({ datos, recargar }: { datos: DatosComunidad; recargar: () => Promise<void> }) {
   const [q, setQ] = useState("");
   const [modal, setModal] = useState(false);
-  const [form, setForm] = useState({ nombre: "", email: "", rol: "PROPIETARIO" as "PROPIETARIO" | "ARRENDATARIO" | "COMITE" | "ADMIN", unidad: "", password: "vecino123" });
+  const [form, setForm] = useState({ nombre: "", email: "", rol: "PROPIETARIO" as "PROPIETARIO" | "ARRENDATARIO" | "COMITE" | "ADMIN", unidad: "", password: "vecino123", telefono: "" });
   const [busy, setBusy] = useState(false);
+  const [datosDe, setDatosDe] = useState<Usuario | null>(null);
 
   const miembros = datos.miembros.filter((m) => (m.usuario.nombre + " " + m.usuario.email).toLowerCase().includes(q.toLowerCase()));
 
@@ -780,11 +781,11 @@ export function ModuloVecinos({ datos, recargar }: { datos: DatosComunidad; reca
     if ((form.rol === "PROPIETARIO" || form.rol === "ARRENDATARIO") && !form.unidad.trim()) { toast("Indica la parcela o unidad (ej: P-14).", "warn"); return; }
     setBusy(true);
     try {
-      await crearVecino(datos.comunidad.id, { ...form, unidad: form.unidad.trim() || undefined });
+      await crearVecino(datos.comunidad.id, { ...form, unidad: form.unidad.trim() || undefined, telefono: form.telefono.trim() || undefined });
       await recargar();
       setModal(false);
-      setForm({ nombre: "", email: "", rol: "PROPIETARIO", unidad: "", password: "vecino123" });
-      toast("Vecino creado. Ya puede entrar con su correo y contraseña.");
+      setForm({ nombre: "", email: "", rol: "PROPIETARIO", unidad: "", password: "vecino123", telefono: "" });
+      toast("Vecino creado. Recibirá un correo para confirmar su cuenta.");
     } catch (e) {
       toast(e instanceof Error ? e.message : "No se pudo crear.", "warn");
     }
@@ -821,6 +822,14 @@ export function ModuloVecinos({ datos, recargar }: { datos: DatosComunidad; reca
                 {m.unidad && <span className="rounded-full bg-paper px-2 py-0.5 font-mono text-[10px] font-bold text-pine">{m.unidad}</span>}
               </div>
             </div>
+            <button
+              onClick={() => setDatosDe(m.usuario)}
+              title="Ver datos del vecino"
+              aria-label={"Ver datos de " + m.usuario.nombre}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-line bg-paper text-ink2 transition-all hover:-translate-y-0.5 hover:border-pine hover:text-pine hover:shadow-soft active:scale-95"
+            >
+              <Eye size={15} />
+            </button>
           </div>
         ))}
       </div>
@@ -828,7 +837,10 @@ export function ModuloVecinos({ datos, recargar }: { datos: DatosComunidad; reca
       <Modal open={modal} onClose={() => setModal(false)} title="Nuevo vecino">
         <div className="space-y-4">
           <Field label="Nombre completo"><input className="field" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} placeholder="Ej: Camila Órdenes" /></Field>
-          <Field label="Correo electrónico"><input className="field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="vecino@correo.cl" /></Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="Correo electrónico"><input className="field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="vecino@correo.cl" /></Field>
+            <Field label="Teléfono de contacto" hint="opcional"><input className="field" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} placeholder="+56 9 1234 5678" /></Field>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Rol">
               <select className="field" value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as typeof form.rol })}>
@@ -843,13 +855,105 @@ export function ModuloVecinos({ datos, recargar }: { datos: DatosComunidad; reca
             </Field>
           </div>
           <Field label="Contraseña inicial"><input className="field" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></Field>
+          <p className="rounded-xl border border-line bg-paper px-3.5 py-2.5 text-[12.5px] leading-relaxed text-ink2">
+            <Mail size={13} className="mr-1 inline text-pine2" /> Al crearlo, recibirá un <strong className="text-ink">correo de confirmación</strong> para activar su cuenta.
+          </p>
           <div className="flex justify-end gap-2.5 border-t border-line pt-4">
             <Btn variant="ghost" onClick={() => setModal(false)}>Cancelar</Btn>
             <Btn variant="neon" onClick={() => void crear()} disabled={busy}>{busy ? <Spinner /> : <>Crear vecino</>}</Btn>
           </div>
         </div>
       </Modal>
+
+      {datosDe && <ModalDatosVecino usuario={datosDe} onClose={() => setDatosDe(null)} />}
     </div>
+  );
+}
+
+/* ── Ver datos del vecino: contacto + contraseña (ver / restablecer) ── */
+function ModalDatosVecino({ usuario, onClose }: { usuario: Usuario; onClose: () => void }) {
+  const [pass, setPass] = useState<{ texto: string | null; cargando: boolean }>({ texto: null, cargando: false });
+  const [viendo, setViendo] = useState(false);
+  const [reset, setReset] = useState<{ clave: string | null; cargando: boolean }>({ clave: null, cargando: false });
+
+  const ver = async () => {
+    setViendo(true);
+    try {
+      const r = await verPassword(usuario.id);
+      setPass({ texto: r.disponible ? r.password_temporal : null, cargando: false });
+    } catch {
+      setPass({ texto: null, cargando: false });
+    }
+    setViendo(false);
+  };
+
+  const restablecer = async () => {
+    setReset({ clave: null, cargando: true });
+    try {
+      const r = await restablecerPassword(usuario.id);
+      setReset({ clave: r.password_temporal, cargando: false });
+      setPass({ texto: null, cargando: false });
+      toast("Contraseña restablecida. Se envió por correo a " + usuario.email + ".");
+    } catch (e) {
+      setReset({ clave: null, cargando: false });
+      toast(e instanceof Error ? e.message : "No se pudo restablecer.", "warn");
+    }
+  };
+
+  const fila = (label: string, valor: React.ReactNode) => (
+    <div className="flex items-center justify-between gap-3 border-b border-line/70 py-2.5 last:border-0">
+      <span className="font-mono text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink3">{label}</span>
+      <span className="min-w-0 truncate text-right text-[13.5px] font-medium text-ink">{valor}</span>
+    </div>
+  );
+
+  return (
+    <Modal open onClose={onClose} title={"Datos · " + usuario.nombre}>
+      <div className="space-y-1">
+        {fila("Correo", usuario.email)}
+        {fila("Teléfono", usuario.telefono || "—")}
+        {fila("Cuenta", usuario.activo
+          ? <span className="inline-flex items-center gap-1.5 text-pine"><CheckCircle2 size={13} /> activa</span>
+          : <span className="inline-flex items-center gap-1.5 text-signal"><XCircle size={13} /> suspendida</span>)}
+        {fila("Alta", fmtFecha(usuario.creado))}
+      </div>
+
+      <div className="mt-4 rounded-xl border border-line bg-paper p-4">
+        <p className="flex items-center gap-2 font-mono text-[10.5px] font-bold uppercase tracking-[0.14em] text-ink3">
+          <KeyRound size={12} className="text-pine2" /> Contraseña
+        </p>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          <span className="min-w-[90px] font-mono text-[15px] font-semibold tracking-[0.15em] text-ink">
+            {reset.clave ? reset.clave : pass.texto ? pass.texto : "••••••••"}
+          </span>
+          {reset.clave && (
+            <button onClick={() => { void navigator.clipboard.writeText(reset.clave ?? ""); toast("Contraseña copiada."); }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-card px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-ink2 transition-colors hover:border-pine hover:text-pine">
+              <Copy size={11} /> Copiar
+            </button>
+          )}
+          <span className="ml-auto flex gap-2">
+            <button onClick={() => void ver()} disabled={viendo}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-pine2/50 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-pine2 transition-colors hover:bg-pine2 hover:text-white disabled:opacity-60">
+              {viendo ? <Spinner className="h-3 w-3" /> : <Eye size={12} />} Ver
+            </button>
+            <button onClick={() => void restablecer()} disabled={reset.cargando}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-amber/60 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wide text-[#8a6114] transition-colors hover:bg-amber hover:text-white disabled:opacity-60">
+              {reset.cargando ? <Spinner className="h-3 w-3" /> : <RefreshCw size={12} />} Restablecer
+            </button>
+          </span>
+        </div>
+        <p className="mt-2.5 text-[11.5px] leading-relaxed text-ink3">
+          {pass.texto === null && !reset.clave
+            ? "«Ver» muestra la clave temporal generada por el sistema (si existe). Por seguridad, las contraseñas se guardan cifradas y no son reversibles."
+            : "Al restablecer se genera una clave temporal y se envía por correo al vecino."}
+        </p>
+      </div>
+
+      <div className="flex justify-end border-t border-line pt-4">
+        <Btn variant="ghost" onClick={onClose}>Cerrar</Btn>
+      </div>
+    </Modal>
   );
 }
 

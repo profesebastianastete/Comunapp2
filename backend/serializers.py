@@ -13,6 +13,7 @@ def usuario(u) -> dict:
     return {
         "id": u.id, "nombre": u.nombre, "email": u.email, "activo": u.activo,
         "creado": iso(u.creado), "rolGlobal": u.rol_global,
+        "telefono": u.telefono,
         "membresias": [
             {"comunidadId": m.comunidad_id, "rol": m.rol, "unidad": m.unidad}
             for m in u.membresias

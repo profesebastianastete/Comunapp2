@@ -5,7 +5,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   actualizarPlan, calcularComision, cobrarFacturaMP, configurarMPPlataforma, crearComunidadSaaS,
-  crearPlan, crearUsuarioSaaS, desvincularMPPlataforma, eliminarPlan, fmtCLP, fmtFecha, fmtMes,
+  crearPlan, crearUsuarioSaaS, desvincularMPPlataforma, eliminarComunidad, eliminarPlan, fmtCLP, fmtFecha, fmtMes,
   generarCobroMP, generarFacturasMes, listadoSaaS, marcarFacturaPagada, probarMPPlataforma,
   ROL_LABEL, setRecursos, setPasswordUsuario, suscribirFacturaMP, toggleEstadoComunidad, toggleUsuarioActivo,
   usuarioActual,
@@ -1236,6 +1236,8 @@ function ConfigMPPlataforma({ mp, refetch }: { mp: MPPlataforma; refetch: () => 
 function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Promise<void>; nueva: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [recBusy, setRecBusy] = useState<string | null>(null);
+  const [borrar, setBorrar] = useState<SaaSData["comunidades"][number] | null>(null);
+  const [borrando, setBorrando] = useState(false);
 
   const toggleRecurso = async (cid: string, clave: "reservas" | "bitacora", valor: boolean) => {
     setRecBusy(cid + ":" + clave);
@@ -1243,6 +1245,20 @@ function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Prom
     await refetch();
     setRecBusy(null);
     toast((clave === "reservas" ? "Reservas" : "Registro de entradas") + (valor ? " activado." : " desactivado."), valor ? "ok" : "warn");
+  };
+
+  const eliminar = async () => {
+    if (!borrar) return;
+    setBorrando(true);
+    try {
+      await eliminarComunidad(borrar.id);
+      toast("Comunidad eliminada: " + borrar.nombre + " (y todos sus datos).", "warn");
+      setBorrar(null);
+      await refetch();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "No se pudo eliminar.", "warn");
+    }
+    setBorrando(false);
   };
 
   return (
@@ -1296,29 +1312,60 @@ function Tenants({ data, refetch, nueva }: { data: SaaSData; refetch: () => Prom
                 </td>
                 <td className="px-5 py-4"><EstadoTag estado={c.estado} /></td>
                 <td className="px-5 py-4 text-right">
-                  <button
-                    disabled={busy === c.id}
-                    onClick={async () => {
-                      setBusy(c.id);
-                      const nuevo = await toggleEstadoComunidad(c.id);
-                      await refetch();
-                      setBusy(null);
-                      toast(c.nombre + (nuevo === "SUSPENDIDA" ? " suspendida." : " reactivada."), nuevo === "SUSPENDIDA" ? "warn" : "ok");
-                    }}
-                    className={
-                      "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wide transition-colors " +
-                      (c.estado === "ACTIVA" ? "border-signal/50 text-signal hover:bg-signal hover:text-white" : "border-neon/50 text-neon hover:bg-neon hover:text-deep")
-                    }
-                  >
-                    {busy === c.id ? <Spinner className="h-3 w-3" /> : <Power size={12} />}
-                    {c.estado === "ACTIVA" ? "Suspender" : "Reactivar"}
-                  </button>
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      disabled={busy === c.id}
+                      onClick={async () => {
+                        setBusy(c.id);
+                        const nuevo = await toggleEstadoComunidad(c.id);
+                        await refetch();
+                        setBusy(null);
+                        toast(c.nombre + (nuevo === "SUSPENDIDA" ? " suspendida." : " reactivada."), nuevo === "SUSPENDIDA" ? "warn" : "ok");
+                      }}
+                      className={
+                        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wide transition-colors " +
+                        (c.estado === "ACTIVA" ? "border-signal/50 text-signal hover:bg-signal hover:text-white" : "border-neon/50 text-neon hover:bg-neon hover:text-deep")
+                      }
+                    >
+                      {busy === c.id ? <Spinner className="h-3 w-3" /> : <Power size={12} />}
+                      {c.estado === "ACTIVA" ? "Suspender" : "Reactivar"}
+                    </button>
+                    <button
+                      onClick={() => setBorrar(c)}
+                      title="Eliminar comunidad y todos sus datos"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-wide text-white/60 transition-colors hover:border-signal hover:bg-signal hover:text-white"
+                    >
+                      <Trash2 size={12} /> Eliminar
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* confirmación de eliminación */}
+      {borrar && (
+        <Modal open onClose={() => setBorrar(null)} title={"Eliminar " + borrar.nombre}>
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-signal/40 bg-signal/10 px-4 py-3">
+              <Trash2 size={18} className="mt-0.5 shrink-0 text-signal" />
+              <p className="text-[13.5px] leading-relaxed text-ink2">
+                Esta acción elimina la comunidad <strong className="text-ink">{borrar.nombre}</strong> junto con
+                <strong className="text-ink"> todos sus datos</strong>: miembros, cobros, pagos, movimientos, avisos,
+                reservas, votaciones y bitácora. No se puede deshacer.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2.5 border-t border-line pt-4">
+              <Btn variant="ghost" onClick={() => setBorrar(null)}>Cancelar</Btn>
+              <Btn variant="primary" className="!bg-signal !border-signal hover:!bg-[#a83d2a]" onClick={() => void eliminar()} disabled={borrando}>
+                {borrando ? <Spinner /> : <><Trash2 size={15} /> Sí, eliminar todo</>}
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

@@ -29,6 +29,7 @@ class Usuario(Base):
     # Confirmación de correo para cuentas nuevas
     email_confirmado: Mapped[bool] = mapped_column(Boolean, default=True)
     token_confirmacion: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    telefono: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     # Contraseña temporal visible para el admin (la genera "restablecer")
     password_temporal: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 

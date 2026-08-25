@@ -38,16 +38,16 @@ modo demo: todo dato viene de la base de datos.
   (normalmente http://localhost:5173)
 
 -------------------------------------------------------------
-4) CUENTAS DE DEMOSTRACIÓN
+4) CUENTA INICIAL (no hay datos demo)
 -------------------------------------------------------------
   SUPERADMIN      equipo@comunapp.cl        admin123
-  ADMINISTRADOR   admin@losalamos.cl        admin123
-  COMITÉ          comite@losalamos.cl       comite123
-  PROPIETARIA     maria@demo.cl             demo123
-  ARRENDATARIO    jorge@demo.cl             demo123
 
   El superadmin entra al panel interno en la ruta /adminapp
   (escríbela directo en la URL; no hay enlaces hacia ella).
+  Desde ahí crea las comunidades reales y sus usuarios.
+
+  Si tu base viene de un despliegue antiguo con comunidades
+  demo, límpialas con:  python3 seed.py --clean-demo
 
 -------------------------------------------------------------
 5) SI ALGO FALLA

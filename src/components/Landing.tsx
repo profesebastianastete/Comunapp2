@@ -1,13 +1,16 @@
 import {
   ArrowRight, ArrowUpRight, BellRing, Building2, CheckCircle2, ClipboardCheck,
-  DoorOpen, Home, Mail, MapPin, Megaphone, PieChart, ShieldCheck, Sparkles, Users, Vote, Wallet,
+  DoorOpen, Home, Mail, MapPin, Megaphone, Menu, PieChart, ShieldCheck, Sparkles, Users, Vote, Wallet, X,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { planesPublicos } from "../lib/store";
 import { Btn, Field, Logo, Modal, Reveal, Spinner, toast } from "./ui";
 
 /* ═══════════════════════ LANDING ═══════════════════════ */
 export default function Landing({ entrar }: { entrar: () => void }) {
   const irA = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const [menu, setMenu] = useState(false);
+  const nav = (id: string) => { setMenu(false); irA(id); };
 
   return (
     <div className="min-h-screen bg-paper text-ink">
@@ -22,14 +25,32 @@ export default function Landing({ entrar }: { entrar: () => void }) {
           </nav>
           <div className="ml-auto flex items-center gap-3 md:ml-0">
             <Btn variant="primary" size="md" onClick={entrar}>Entrar <ArrowRight size={15} /></Btn>
+            <button
+              onClick={() => setMenu((m) => !m)}
+              aria-label={menu ? "Cerrar menú" : "Abrir menú"}
+              className="grid h-10 w-10 place-items-center rounded-xl border border-line bg-card text-pine transition-all hover:border-pine active:scale-95 md:hidden"
+            >
+              {menu ? <X size={19} /> : <Menu size={19} />}
+            </button>
           </div>
         </div>
+        {/* menú móvil */}
+        {menu && (
+          <nav className="pop-in border-t border-line/70 bg-card px-5 py-4 md:hidden">
+            <div className="grid gap-1 font-mono text-[12px] font-semibold uppercase tracking-[0.18em] text-ink2">
+              {[["comunidad", "Tu comunidad"], ["servicios", "Servicios"], ["planes", "Planes"]].map(([id, l]) => (
+                <button key={id} onClick={() => nav(id)} className="rounded-xl px-3 py-3 text-left transition-colors hover:bg-paper hover:text-pine">
+                  {l}
+                </button>
+              ))}
+            </div>
+          </nav>
+        )}
       </header>
 
       <Hero irA={irA} />
       <FranjaComunidad />
       <Servicios />
-      <ComoFunciona />
       <Planes />
       <Footer entrar={entrar} />
     </div>
@@ -312,66 +333,6 @@ function Servicios() {
   );
 }
 
-/* ── cómo funciona ──────────────────────────────────────────── */
-const PASOS = [
-  { n: "01", titulo: "Configura tu espacio y tu equipo", texto: "El administrador crea la comunidad y sus unidades en pocos pasos. Toda la información queda segura y organizada desde el primer día." },
-  { n: "02", titulo: "Tu comunidad siempre conectada", texto: "Tus vecinos pagan su mensualidad, reservan espacios y votan directamente desde su teléfono. Tú mantienes toda la gestión bajo control." },
-  { n: "03", titulo: "El dinero directo en tu cuenta", texto: "Recibe los ingresos de forma íntegra e inmediata. Sin retenciones ni demoras, el dinero va directo a tu cuenta." },
-];
-function ComoFunciona() {
-  return (
-    <section id="como" className="border-t border-line bg-card py-24">
-      <div className="mx-auto max-w-7xl px-5 md:px-8">
-        <Reveal>
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.24em] text-pine2">— Cómo funciona</p>
-          <h2 className="mt-3 max-w-3xl font-display text-[clamp(2rem,4.4vw,3.4rem)] font-bold leading-[1.02] tracking-tight">
-            De la gestión manual a la simplicidad <span className="relative inline-block">en tres pasos.<span className="absolute -bottom-1 left-0 h-[5px] w-full rounded-full bg-neon" /></span>
-          </h2>
-        </Reveal>
-
-        <div className="relative mt-14 grid gap-10 lg:grid-cols-3 lg:gap-8">
-          <span className="absolute left-[16%] right-[16%] top-[52px] hidden border-t-2 border-dashed border-pine2/30 lg:block" aria-hidden />
-          {PASOS.map((p, i) => (
-            <Reveal key={p.n} delay={i * 140}>
-              <div className="relative">
-                <span className="relative z-[2] grid h-[52px] w-[52px] place-items-center rounded-2xl border-2 border-pine bg-neon font-display text-lg font-bold text-deep shadow-soft">
-                  {p.n}
-                </span>
-                <h3 className="mt-5 font-display text-[22px] font-bold tracking-tight text-ink">{p.titulo}</h3>
-                <p className="mt-2 max-w-sm text-[14.5px] leading-relaxed text-ink2">{p.texto}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-
-        {/* panel de roles */}
-        <Reveal delay={160}>
-          <div className="mt-16 grid gap-4 md:grid-cols-3">
-            {[
-              { icon: Home, titulo: "Tu Espacio", texto: "Cada parcela o unidad con su cuenta, sus pagos y su historial.", chip: "Vecinos" },
-              { icon: Users, titulo: "Equipo Administrador", texto: "Administrador y comité trabajando sobre la misma información.", chip: "Gestión" },
-              { icon: Vote, titulo: "Votación de Vecinos", texto: "Asambleas digitales donde cada unidad vale un voto.", chip: "Decisiones" },
-            ].map((r, i) => (
-              <div key={r.titulo} className={"card-in flex items-start gap-4 rounded-2xl border border-line p-6 shadow-soft transition-all hover:-translate-y-1 hover:shadow-lift " + (i === 1 ? "bg-pine text-white border-pine" : "bg-paper/60")} style={{ ["--ci-delay" as never]: i * 120 + "ms" }}>
-                <span className={"grid h-12 w-12 shrink-0 place-items-center rounded-xl " + (i === 1 ? "bg-neon text-deep" : "bg-card text-pine border border-line")}>
-                  <r.icon size={22} />
-                </span>
-                <div>
-                  <p className={"flex items-center gap-2 font-display text-lg font-bold tracking-tight " + (i === 1 ? "text-white" : "text-ink")}>
-                    {r.titulo}
-                    <span className={"rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.12em] " + (i === 1 ? "bg-neon/25 text-neon" : "bg-neon/30 text-pine")}>{r.chip}</span>
-                  </p>
-                  <p className={"mt-1 text-[13.5px] leading-relaxed " + (i === 1 ? "text-white/70" : "text-ink2")}>{r.texto}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
 /* ── planes ─────────────────────────────────────────────────── */
 const FEATURES: Record<string, string[]> = {
   PARCELAS: ["Unidades ilimitadas", "Cobranza con Mercado Pago", "Importación de comunidades", "Transparencia financiera", "Asambleas y votaciones", "Soporte prioritario"],
@@ -379,6 +340,20 @@ const FEATURES: Record<string, string[]> = {
 };
 function Planes() {
   const [cotiza, setCotiza] = useState(false);
+  // El precio se lee de los planes reales (los edita el superadmin en Ajustes).
+  // Si la API no está disponible se muestra el valor de respaldo.
+  const [precio, setPrecio] = useState("$29.900");
+  useEffect(() => {
+    let vivo = true;
+    planesPublicos()
+      .then((r) => {
+        if (!vivo) return;
+        const p = r.planes.find((x) => /comunidad/i.test(x.nombre) || x.id === "PARCELAS") ?? r.planes.find((x) => x.precio > 0);
+        if (p) setPrecio("$" + Math.round(p.precio).toLocaleString("es-CL"));
+      })
+      .catch(() => { /* sin API: se mantiene el respaldo */ });
+    return () => { vivo = false; };
+  }, []);
 
   return (
     <section id="planes" className="dotgrid-soft relative scroll-mt-24 py-24">
@@ -396,7 +371,7 @@ function Planes() {
           {/* Comunidades (destacado) */}
           <Reveal delay={0}>
             <PlanCard
-              destacado prefijo="desde" nombre="Comunidades" precio="$29.900" periodo="/ mes"
+              destacado prefijo="desde" nombre="Comunidades" precio={precio} periodo="/ mes"
               texto="Para parcelaciones y comunidades que quieren todo en orden."
               features={FEATURES.PARCELAS} entrar={() => setCotiza(true)} btn="Elegir este plan"
             />
