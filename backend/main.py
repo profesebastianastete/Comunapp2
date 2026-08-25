@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from database import Base, SessionLocal, engine
+from database import Base, SessionLocal, engine, sincronizar_esquema
 from routers import api, mp
 
 # Versión del backend. Se expone en /api/diagnostico para confirmar en
@@ -18,6 +18,11 @@ s = get_settings()
 
 # Crea las tablas al arrancar (en producción real usa Alembic para migraciones).
 Base.metadata.create_all(bind=engine)
+# create_all no hace ALTER: agrega las columnas nuevas que falten (ej: telefono).
+try:
+    sincronizar_esquema()
+except Exception as exc:  # la API debe arrancar igual
+    print(f"[esquema] ERROR al sincronizar: {exc!r}")
 
 
 def bootstrap_datos_iniciales():
