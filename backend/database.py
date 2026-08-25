@@ -48,14 +48,22 @@ def sincronizar_esquema():
                 continue
             try:
                 tipo = col.type.compile(engine.dialect)
-                ddl = f"ALTER TABLE {nombre} ADD COLUMN {col.name} {tipo}"
-                # Default escalar (no callable) para no dejar NULLs en filas viejas
-                if col.default is not None:
-                    arg = getattr(col.default, "arg", None)
-                    if arg is not None and not callable(arg):
-                        ddl += f" DEFAULT {arg!r}"
                 with engine.begin() as conn:
-                    conn.execute(text(ddl))
+                    # ADD COLUMN sin DEFAULT en línea: el valor por defecto se
+                    # aplica después con un UPDATE parametrizado. Así un default
+                    # con llaves (JSON) jamás se interpreta como parámetro de
+                    # text() (error "bind parameter 'true'").
+                    conn.execute(text(f"ALTER TABLE {nombre} ADD COLUMN {col.name} {tipo}"))
+                    valor = None
+                    if col.default is not None:
+                        arg = getattr(col.default, "arg", None)
+                        if arg is not None:
+                            valor = arg() if callable(arg) else arg
+                    if valor is not None:
+                        conn.execute(
+                            text(f"UPDATE {nombre} SET {col.name} = :v WHERE {col.name} IS NULL"),
+                            {"v": valor},
+                        )
                 print(f"[esquema] Columna agregada: {nombre}.{col.name} ({tipo})")
             except Exception as exc:  # noqa: BLE001 — nunca romper el arranque
                 print(f"[esquema] No se pudo agregar {nombre}.{col.name}: {exc!r}")

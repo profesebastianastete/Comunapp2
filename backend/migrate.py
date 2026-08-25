@@ -31,13 +31,20 @@ def migrar() -> None:
                 continue
             try:
                 tipo = col.type.compile(engine.dialect)
-                ddl = f"ALTER TABLE {nombre} ADD COLUMN {col.name} {tipo}"
-                if col.default is not None:
-                    arg = getattr(col.default, "arg", None)
-                    if arg is not None and not callable(arg):
-                        ddl += f" DEFAULT {arg!r}"
                 with engine.begin() as conn:
-                    conn.execute(text(ddl))
+                    # ADD COLUMN sin DEFAULT en línea; el default se aplica con un
+                    # UPDATE parametrizado (un JSON con llaves rompería text()).
+                    conn.execute(text(f"ALTER TABLE {nombre} ADD COLUMN {col.name} {tipo}"))
+                    valor = None
+                    if col.default is not None:
+                        arg = getattr(col.default, "arg", None)
+                        if arg is not None:
+                            valor = arg() if callable(arg) else arg
+                    if valor is not None:
+                        conn.execute(
+                            text(f"UPDATE {nombre} SET {col.name} = :v WHERE {col.name} IS NULL"),
+                            {"v": valor},
+                        )
                 print(f"[migrate] + {nombre}.{col.name} ({tipo})")
                 agregadas += 1
             except Exception as exc:  # noqa: BLE001
