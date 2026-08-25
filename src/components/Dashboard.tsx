@@ -1,6 +1,6 @@
 import {
-  AlertTriangle, BellRing, CalendarDays, CheckCircle2, Download, FileDown, KeyRound, Megaphone, PieChart,
-  Receipt, RefreshCw, ShieldCheck, Vote, Wallet, Wrench,
+  AlertTriangle, BellRing, CalendarDays, CheckCircle2, Download, FileDown, KeyRound, LogOut,
+  Megaphone, Menu, PieChart, Receipt, RefreshCw, ShieldCheck, UserRound, Vote, Wallet, Wrench, X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -26,6 +26,8 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
   const [modalPass, setModalPass] = useState(false);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [cargaLenta, setCargaLenta] = useState(false);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [perfilAbierto, setPerfilAbierto] = useState(false);
 
   const esResidente = sesion.rol === "PROPIETARIO" || sesion.rol === "ARRENDATARIO";
   const esAdmin = sesion.rol === "ADMIN";
@@ -99,6 +101,9 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
     }
   }, [nav, modulo, esResidente]);
 
+  // Título de la sección actual (visible en pantallas pequeñas)
+  const tituloModulo = nav.find((n) => n.id === modulo)?.label ?? "Panel";
+
   if (!usuario) {
     // Sesión huérfana (cuenta eliminada, datos reiniciados o caché antigua):
     // nunca dejar la pantalla en blanco.
@@ -125,41 +130,124 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
     <div className="dotgrid-soft min-h-screen bg-paper">
       {/* topbar */}
       <header className="glass sticky top-0 z-50 border-b border-line/80">
-        <div className="mx-auto flex h-[64px] max-w-[1400px] items-center gap-4 px-5 md:px-8">
-          <Logo small />
-          <span className="hidden h-6 w-px bg-line sm:block" />
-          <div className="hidden min-w-0 sm:block">
+        <div className="mx-auto flex h-[64px] max-w-[1400px] items-center gap-3 px-4 sm:px-5 md:gap-4 md:px-8">
+          <span className="shrink-0"><Logo small /></span>
+          <span className="hidden h-6 w-px bg-line lg:block" />
+          {/* Título de la sección actual (pantallas pequeñas) */}
+          <div className="min-w-0 lg:hidden">
+            <p className="truncate font-display text-[15px] font-bold leading-tight text-ink">{tituloModulo}</p>
+            <p className="truncate font-mono text-[9px] uppercase tracking-[0.14em] text-ink3">{datos?.comunidad.nombre ?? "Tu comunidad"}</p>
+          </div>
+          <div className="hidden min-w-0 lg:block">
             <p className="truncate font-display text-[15px] font-bold leading-tight text-ink">{datos?.comunidad.nombre ?? "Tu comunidad"}</p>
             <p className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink3">{datos?.comunidad.ciudad} · {datos?.comunidad.unidades} unidades</p>
           </div>
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
-            <div className="hidden text-right md:block">
+          <div className="ml-auto flex shrink-0 items-center gap-2 md:gap-3">
+            {/* Escritorio */}
+            <div className="hidden text-right lg:block">
               <p className="text-[12.5px] font-semibold leading-tight text-ink">{usuario.nombre}</p>
               <p className="font-mono text-[9.5px] uppercase tracking-wide text-ink3">{sesion.unidad ?? ROL_LABEL[sesion.rol]}</p>
             </div>
-            <span className="hidden sm:block"><RolTag rol={sesion.rol} label={ROL_LABEL[sesion.rol]} /></span>
+            <span className="hidden md:block"><RolTag rol={sesion.rol} label={ROL_LABEL[sesion.rol]} /></span>
             <button
               onClick={() => setModalPass(true)}
-              title="Cambiar contraseña"
-              aria-label="Cambiar contraseña"
-              className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-card text-ink2 transition-all hover:-translate-y-0.5 hover:border-pine hover:text-pine hover:shadow-soft"
+              title="Cambiar contraseña" aria-label="Cambiar contraseña"
+              className="hidden h-9 w-9 place-items-center rounded-xl border border-line bg-card text-ink2 transition-all hover:-translate-y-0.5 hover:border-pine hover:text-pine hover:shadow-soft lg:grid"
             >
               <KeyRound size={15} />
             </button>
-            <Btn variant="ghost" size="sm" onClick={salir} title="Salir">
-              <span className="hidden sm:inline">Salir</span>
-              <span className="sm:hidden" aria-label="Salir">⎋</span>
-            </Btn>
+            <span className="hidden lg:block"><Btn variant="ghost" size="sm" onClick={salir} title="Salir">Salir</Btn></span>
+            {/* Móvil: perfil (dropdown) + hamburguesa */}
+            <div className="relative lg:hidden">
+              <button
+                onClick={() => setPerfilAbierto((v) => !v)}
+                aria-label="Menú de usuario" aria-expanded={perfilAbierto}
+                className={"grid h-9 w-9 place-items-center rounded-xl border transition-all active:scale-95 " + (perfilAbierto ? "border-pine bg-pine text-white" : "border-line bg-card text-ink2 hover:border-pine hover:text-pine")}
+              >
+                <UserRound size={16} />
+              </button>
+              {perfilAbierto && (
+                <>
+                  <button className="fixed inset-0 z-[80] cursor-default" onClick={() => setPerfilAbierto(false)} aria-label="Cerrar menú de usuario" />
+                  <div className="pop-in absolute right-0 top-[calc(100%+10px)] z-[81] w-64 rounded-2xl border border-line bg-card p-2 shadow-lift">
+                    <div className="border-b border-line px-3 py-2.5">
+                      <p className="truncate text-[13.5px] font-bold text-ink">{usuario.nombre}</p>
+                      <p className="truncate font-mono text-[10px] text-ink3">{usuario.email}</p>
+                      <div className="mt-2"><RolTag rol={sesion.rol} label={ROL_LABEL[sesion.rol]} /></div>
+                    </div>
+                    <button onClick={() => { setPerfilAbierto(false); setModalPass(true); }} className="mt-1 flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[13px] font-semibold text-ink2 transition-colors hover:bg-paper active:bg-paper">
+                      <KeyRound size={15} className="text-pine2" /> Cambiar contraseña
+                    </button>
+                    <button onClick={salir} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[13px] font-semibold text-signal transition-colors hover:bg-signal/10 active:bg-signal/10">
+                      <LogOut size={15} /> Salir
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              onClick={() => setMenuAbierto(true)}
+              aria-label="Abrir menú de navegación"
+              className="grid h-9 w-9 place-items-center rounded-xl border border-line bg-card text-ink transition-all hover:border-pine hover:text-pine active:scale-95 lg:hidden"
+            >
+              <Menu size={17} />
+            </button>
           </div>
         </div>
       </header>
 
+      {/* Drawer de navegación (móvil / tablet) */}
+      {menuAbierto && (
+        <div className="fixed inset-0 z-[90] lg:hidden">
+          <button className="absolute inset-0 bg-deep/50 backdrop-blur-[2px]" onClick={() => setMenuAbierto(false)} aria-label="Cerrar menú" />
+          <aside className="slide-in-right absolute right-0 top-0 flex h-full w-[300px] max-w-[86vw] flex-col border-l border-line bg-paper shadow-lift">
+            <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+              <div className="min-w-0">
+                <p className="truncate font-display text-[16px] font-bold text-ink">{datos?.comunidad.nombre ?? "Tu comunidad"}</p>
+                <p className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-ink3">{datos?.comunidad.ciudad ?? "—"} · {ROL_LABEL[sesion.rol]}</p>
+              </div>
+              <button onClick={() => setMenuAbierto(false)} aria-label="Cerrar" className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-line bg-card text-ink2 transition-all hover:border-pine hover:text-pine active:scale-95">
+                <X size={16} />
+              </button>
+            </div>
+            <nav className="flex-1 space-y-1.5 overflow-y-auto p-4">
+              {nav.map((n) => {
+                const activo = modulo === n.id;
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => { setModulo(n.id); setMenuAbierto(false); }}
+                    className={
+                      "flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left font-mono text-[11.5px] font-bold uppercase tracking-[0.08em] transition-all active:scale-[0.98] " +
+                      (activo ? "border-pine bg-pine text-white shadow-soft" : "border-line bg-card text-ink2 hover:border-pine/60 hover:text-pine")
+                    }
+                  >
+                    <span className={"grid h-9 w-9 shrink-0 place-items-center rounded-lg " + (activo ? "bg-neon text-deep" : "bg-paper text-pine")}>
+                      <n.icon size={17} />
+                    </span>
+                    <span className="truncate">{n.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="space-y-1 border-t border-line p-4">
+              <button onClick={() => { setMenuAbierto(false); setModalPass(true); }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[13px] font-semibold text-ink2 transition-colors hover:bg-card active:bg-card">
+                <KeyRound size={15} className="text-pine2" /> Cambiar contraseña
+              </button>
+              <button onClick={salir} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[13px] font-semibold text-signal transition-colors hover:bg-signal/10 active:bg-signal/10">
+                <LogOut size={15} /> Salir
+              </button>
+            </div>
+          </aside>
+        </div>
+      )}
+
       <ModalCambiarPassword open={modalPass} onClose={() => setModalPass(false)} usuario={usuario.nombre} />
 
       <div className="mx-auto grid max-w-[1400px] gap-7 px-5 py-8 md:px-8 lg:grid-cols-[230px_1fr]">
-        {/* sidebar */}
-        <aside className="lg:sticky lg:top-[88px] lg:self-start">
-          <nav className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:pb-0">
+        {/* sidebar (solo escritorio; en pantallas pequeñas lo reemplaza el drawer) */}
+        <aside className="hidden lg:sticky lg:top-[88px] lg:block lg:self-start">
+          <nav className="flex flex-col gap-1.5">
             {nav.map((n) => {
               const activo = modulo === n.id;
               return (

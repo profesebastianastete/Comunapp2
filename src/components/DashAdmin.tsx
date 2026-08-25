@@ -12,7 +12,7 @@ import {
   type DatosComunidad, type FilaCSV, type InformeAPI, type Sesion, type Suscripcion, type Usuario,
 } from "../lib/store";
 import { generarInformePDF } from "../lib/pdf";
-import { Btn, Empty, EstadoTag, Field, Modal, RolTag, Spinner, StatCard, toast } from "./ui";
+import { Btn, CountUp, Empty, EstadoTag, Field, Modal, RolTag, Spinner, StatCard, toast } from "./ui";
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -72,37 +72,120 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
   };
 
   return (
-    <div className="fade-swap space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label={"Cobrado · " + fmtMes(periodo)} value={fmtCLP(cobrado)} icon={<Wallet size={18} />} accent delay={0} />
-        <StatCard label="Por cobrar" value={fmtCLP(total - cobrado)} sub={pendientes + " pagos pendientes"} icon={<Coins size={18} />} delay={70} />
-        <StatCard label="Recaudación" value={pct + "%"} sub="del total del mes" icon={<CheckCircle2 size={18} />} delay={140} />
-        <StatCard label="Unidades" value={datos.comunidad.unidades} sub={delPeriodo.length + " cobros este mes"} icon={<Building2 size={18} />} delay={210} />
+    <div className="fade-swap space-y-5 md:space-y-6">
+      {/* ── KPIs · prioridad: COBRADO → POR COBRAR → RECAUDACIÓN → UNIDADES ── */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="card-in relative overflow-hidden rounded-2xl bg-pine p-5 text-white shadow-soft">
+          <span className="pointer-events-none absolute -right-7 -top-9 h-28 w-28 rounded-full bg-neon/10" aria-hidden />
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white/60">Cobrado</p>
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-neon/15 text-neon"><Wallet size={17} /></span>
+          </div>
+          <p className="tnum mt-3 font-display text-[32px] font-bold leading-none text-neon">
+            <CountUp to={cobrado} prefix="$" />
+          </p>
+          <p className="mt-2.5 text-[12px] text-white/60">{fmtMes(periodo)} · {delPeriodo.length - pendientes} de {delPeriodo.length} pagos</p>
+        </div>
+
+        <div className="card-in relative overflow-hidden rounded-2xl bg-deep p-5 text-white shadow-soft" style={{ ["--ci-delay" as never]: "70ms" }}>
+          <span className="pointer-events-none absolute -right-7 -top-9 h-28 w-28 rounded-full bg-signal/10" aria-hidden />
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-white/60">Por cobrar</p>
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-white/80"><Coins size={17} /></span>
+          </div>
+          <p className="tnum mt-3 font-display text-[32px] font-bold leading-none text-white">
+            <CountUp to={total - cobrado} prefix="$" />
+          </p>
+          <p className="mt-2.5 text-[12px] text-white/60">{pendientes} {pendientes === 1 ? "pago pendiente" : "pagos pendientes"}</p>
+        </div>
+
+        <div className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft" style={{ ["--ci-delay" as never]: "140ms" }}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ink3">Recaudación</p>
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-pine/10 text-pine"><CheckCircle2 size={17} /></span>
+          </div>
+          <p className="tnum mt-3 font-display text-[32px] font-bold leading-none text-pine"><CountUp to={pct} suffix="%" /></p>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-paper">
+            <div className="bar-x h-full rounded-full bg-neon" style={{ width: pct + "%" }} />
+          </div>
+          <p className="mt-2 text-[12px] text-ink3">del total del mes</p>
+        </div>
+
+        <div className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft" style={{ ["--ci-delay" as never]: "210ms" }}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-ink3">Unidades</p>
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-pine/10 text-pine"><Building2 size={17} /></span>
+          </div>
+          <p className="tnum mt-3 font-display text-[32px] font-bold leading-none text-ink"><CountUp to={datos.comunidad.unidades} /></p>
+          <p className="mt-2.5 text-[12px] text-ink3">{delPeriodo.length} cobros este mes</p>
+        </div>
+      </div>
+
+      {/* ── Filtros: apilados a ancho completo en móvil, táctiles ── */}
+      <div className="grid grid-cols-1 gap-3 md:flex md:flex-wrap md:items-center">
+        <select className="field h-12 w-full cursor-pointer text-[14px] font-medium transition-colors active:border-pine md:h-10! md:w-auto! md:text-[13px]" value={periodo} onChange={(e) => setPeriodo(e.target.value)} aria-label="Periodo">
+          {periodos.map((p) => <option key={p} value={p}>{fmtMes(p)}</option>)}
+        </select>
+        <select className="field h-12 w-full cursor-pointer text-[14px] font-medium transition-colors active:border-pine md:h-10! md:w-auto! md:text-[13px]" value={fEstado} onChange={(e) => setFEstado(e.target.value)} aria-label="Filtrar por estado">
+          <option value="todos">Todos los estados</option>
+          <option value="PENDIENTE">Pendientes</option>
+          <option value="PAGADO">Pagados</option>
+          <option value="VENCIDO">Vencidos</option>
+        </select>
+        <p className="px-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink3 md:ml-1">{filtrados.length} {filtrados.length === 1 ? "resultado" : "resultados"}</p>
       </div>
 
       <div className="rounded-2xl border border-line bg-card shadow-soft">
-        <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-4">
-          <div>
-            <h3 className="font-display text-xl font-bold text-ink">Cobros del mes</h3>
-            <p className="text-[12.5px] text-ink3">Pagos del mes, cuotas y multas por unidad</p>
-          </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2.5">
-            <select className="field h-10! w-auto! text-[13px]" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
-              {periodos.map((p) => <option key={p} value={p}>{fmtMes(p)}</option>)}
-            </select>
-            <select className="field h-10! w-auto! text-[13px]" value={fEstado} onChange={(e) => setFEstado(e.target.value)}>
-              <option value="todos">Todos los estados</option>
-              <option value="PENDIENTE">Pendientes</option>
-              <option value="PAGADO">Pagados</option>
-              <option value="VENCIDO">Vencidos</option>
-            </select>
-          </div>
+        <div className="border-b border-line px-5 py-4">
+          <h3 className="font-display text-xl font-bold text-ink">Cobros del mes</h3>
+          <p className="text-[12.5px] text-ink3">Pagos del mes, cuotas y multas por unidad</p>
         </div>
 
         {filtrados.length === 0 ? (
           <div className="p-6"><Empty title="Sin cobros en este periodo" sub={esAdmin ? "Genera los pagos del mes para todas las unidades." : "El administrador aún no genera este mes."} /></div>
         ) : (
-          <div className="code-scroll overflow-x-auto">
+          <>
+            {/* ── Tarjetas de lista táctiles (móvil): unidad → monto → concepto → estado + acciones ── */}
+            <ul className="space-y-3.5 p-4 md:hidden">
+              {filtrados.map((c, i) => (
+                <li key={c.id} className="card-in rounded-2xl border border-line bg-paper/60 p-4 shadow-soft transition-shadow hover:shadow-lift" style={{ ["--ci-delay" as never]: Math.min(i, 8) * 45 + "ms" }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-pine font-display text-[17px] font-bold text-neon" title={"Unidad " + c.unidad}>{c.unidad}</span>
+                    <div className="min-w-0 text-right">
+                      <p className="tnum font-display text-[26px] font-bold leading-none text-ink">{fmtCLP(c.monto)}</p>
+                      <p className="mt-1 font-mono text-[9px] uppercase tracking-[0.14em] text-ink3">{fmtMes(c.periodo)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[14px] font-medium leading-snug text-ink2">{c.concepto}</p>
+                  <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2.5 border-t border-dashed border-line pt-3.5">
+                    <EstadoTag estado={c.estado} />
+                    {esAdmin && (c.estado !== "PAGADO" ? (
+                      <div className="flex w-full gap-2 sm:w-auto">
+                        <button
+                          onClick={() => void registrarPago(c.id)} disabled={registrando === c.id}
+                          title="Registrar pago recibido"
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-pine px-4 py-3 font-mono text-[11px] font-bold uppercase tracking-wide text-white transition-all hover:bg-pine2 active:scale-[0.96] disabled:opacity-60 sm:flex-none"
+                        >
+                          {registrando === c.id ? <Spinner className="h-4 w-4" /> : <CreditCard size={16} />} Pago
+                        </button>
+                        <button
+                          onClick={() => void validarTransferencia(c.id)} disabled={validando === c.id}
+                          title="Confirmar transferencia bancaria recibida"
+                          className="flex flex-1 items-center justify-center gap-2 rounded-xl border-[1.5px] border-pine2/60 bg-card px-4 py-3 font-mono text-[11px] font-bold uppercase tracking-wide text-pine2 transition-all hover:bg-pine2 hover:text-white active:scale-[0.96] disabled:opacity-60 sm:flex-none"
+                        >
+                          {validando === c.id ? <Spinner className="h-4 w-4" /> : <Landmark size={16} />} Transferencia
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-mono text-[10px] uppercase tracking-wide text-ink3">Conciliado</span>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            {/* ── Tabla (escritorio) ── */}
+            <div className="code-scroll hidden overflow-x-auto md:block">
             <table className="w-full min-w-[680px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-line font-mono text-[10px] uppercase tracking-[0.16em] text-ink3">
@@ -140,7 +223,8 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -162,7 +246,7 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
             <Field label="Monto por unidad">
               <input className="field" type="number" min={0} step={1000} value={montoMes || ""} onChange={(e) => setMontoMes(Number(e.target.value))} />
             </Field>
-            <Btn variant="neon" onClick={() => void generar()} disabled={generando || montoMes <= 0}>
+            <Btn variant="neon" className="h-12 w-full sm:h-auto sm:w-auto" onClick={() => void generar()} disabled={generando || montoMes <= 0}>
               {generando ? <Spinner /> : <>Generar cobro</>}
             </Btn>
           </div>
