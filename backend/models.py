@@ -97,6 +97,23 @@ class Pago(Base):
     metodo: Mapped[str] = mapped_column(String(40), default="Mercado Pago")
     referencia: Mapped[str] = mapped_column(String(80), default="")
     fecha: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Datos de validación del pago (transferencias): quién y cuándo lo validó
+    validado_fecha: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    validado_por: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+
+
+class DocumentoComunidad(Base):
+    """Estatutos, reglamento y actas de la comunidad (PDF o imagen)."""
+    __tablename__ = "documentos_comunidad"
+    id: Mapped[str] = mapped_column(String(16), primary_key=True, default=uid)
+    comunidad_id: Mapped[str] = mapped_column(ForeignKey("comunidades.id", ondelete="CASCADE"), index=True)
+    tipo: Mapped[str] = mapped_column(String(20))  # ESTATUTO | REGLAMENTO | ACTA
+    nombre: Mapped[str] = mapped_column(String(200))
+    mime: Mapped[str] = mapped_column(String(80), default="application/pdf")
+    tamano: Mapped[int] = mapped_column(default=0)
+    data_url: Mapped[str] = mapped_column(Text)  # base64 (para archivos de tamaño moderado)
+    subido_por: Mapped[str] = mapped_column(String(120), default="")
+    creado: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Movimiento(Base):
@@ -143,6 +160,9 @@ class Votacion(Base):
     opciones: Mapped[str] = mapped_column(Text, default="")  # JSON list
     abierta: Mapped[bool] = mapped_column(Boolean, default=True)
     creado: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Periodo hábil de votación (opcional): si se definen, solo se vota dentro del rango
+    inicio: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    fin: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     votos: Mapped[list["Voto"]] = relationship(back_populates="votacion", cascade="all, delete-orphan")
 
 
