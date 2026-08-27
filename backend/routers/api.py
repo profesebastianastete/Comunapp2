@@ -9,7 +9,7 @@ import random
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -485,6 +485,73 @@ def cancelar_reserva(cid: str, rid: str, payload: dict = Depends(usuario_actual)
     if r and r.comunidad_id == cid:
         db.delete(r)
         db.commit()
+    return {"ok": True}
+
+
+# ─────────────────────────── documentos de comunidad ───────────────────────────
+class DocumentoIn(BaseModel):
+    tipo: str  # ESTATUTO | REGLAMENTO | ACTA
+    nombre: Optional[str] = None
+
+
+@router.post("/comunidades/{cid}/documentos", dependencies=[Depends(require_roles(*GESTION))])
+def subir_documento(
+    cid: str,
+    tipo: str = Form(...),
+    nombre: str = Form(None),
+    archivo: UploadFile = File(...),
+    payload: dict = Depends(usuario_actual),
+    db: Session = Depends(get_db)
+):
+    """Sube un documento (estatuto, reglamento o acta) a la comunidad."""
+    verificar_membresia(db, payload["sub"], cid)
+    
+    # Validar tipo de documento
+    tipos_validos = ["ESTATUTO", "REGLAMENTO", "ACTA"]
+    if tipo.upper() not in tipos_validos:
+        raise HTTPException(400, f"Tipo de documento inválido. Debe ser uno de: {', '.join(tipos_validos)}")
+    
+    # Validar extensión del archivo
+    allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png"]
+    file_ext = "." + archivo.filename.split(".")[-1].lower() if "." in archivo.filename else ""
+    if file_ext not in allowed_extensions:
+        raise HTTPException(400, f"Archivo no permitido. Extensiones válidas: {', '.join(allowed_extensions)}")
+    
+    # Leer contenido del archivo
+    content = archivo.file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB max
+        raise HTTPException(400, "El archivo excede el tamaño máximo de 10MB.")
+    
+    # Convertir a base64
+    import base64
+    data_url = f"data:{archivo.content_type};base64,{base64.b64encode(content).decode()}"
+    
+    # Crear documento
+    doc = DocumentoComunidad(
+        comunidad_id=cid,
+        tipo=tipo.upper(),
+        nombre=nombre or archivo.filename,
+        mime=archivo.content_type or "application/pdf",
+        tamano=len(content),
+        data_url=data_url,
+        subido_por=payload["sub"]
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    
+    return {"ok": True, "documentoId": doc.id, "nombre": doc.nombre, "tipo": doc.tipo}
+
+
+@router.delete("/comunidades/{cid}/documentos/{did}", dependencies=[Depends(require_roles(*GESTION))])
+def eliminar_documento(cid: str, did: str, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """Elimina un documento de la comunidad."""
+    verificar_membresia(db, payload["sub"], cid)
+    doc = db.get(DocumentoComunidad, did)
+    if not doc or doc.comunidad_id != cid:
+        raise HTTPException(404, "Documento no encontrado.")
+    db.delete(doc)
+    db.commit()
     return {"ok": True}
 
 
