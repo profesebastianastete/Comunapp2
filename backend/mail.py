@@ -8,6 +8,7 @@ import smtplib
 import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Optional
 
 from config import get_settings
 
@@ -77,8 +78,18 @@ def correo_confirmacion(destinatario: str, nombre: str, token: str) -> bool:
     return enviar([destinatario], "Confirma tu correo · ComunApp", html)
 
 
-def correo_nuevo_cobro(destinatarios: list[str], comunidad: str, periodo: str, monto: str) -> bool:
-    html = _base("Nuevo cobro generado", f"""
+def correo_nuevo_cobro(destinatarios: list[str], comunidad: str, periodo: str, monto: str, unidad: Optional[str] = None, motivo: Optional[str] = None) -> bool:
+    if unidad and motivo:
+        html = _base("Nuevo cobro individual", f"""
+    <p>La administración de <strong>{comunidad}</strong> generó un nuevo cobro individual.</p>
+    <p style="background:#f4f8f1;border:1px solid #dde8dc;border-radius:12px;padding:16px;">
+      <strong>Unidad:</strong> {unidad}<br/>
+      <strong>Motivo:</strong> {motivo}<br/>
+      <strong>Monto:</strong> {monto}
+    </p>
+    <p>Ingresa a tu cuenta para ver el detalle y pagar en línea.</p>""")
+    else:
+        html = _base("Nuevo cobro generado", f"""
     <p>La administración de <strong>{comunidad}</strong> generó un nuevo cobro.</p>
     <p style="background:#f4f8f1;border:1px solid #dde8dc;border-radius:12px;padding:16px;">
       <strong>Periodo:</strong> {periodo}<br/>

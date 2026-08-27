@@ -257,6 +257,8 @@ def pagar_cobro(cid: str, cobro_id: str, payload: dict = Depends(usuario_actual)
 class RegistrarPagoIn(BaseModel):
     cobro_id: str
     metodo: str
+    fecha_pago: Optional[str] = None
+    folio: Optional[str] = None
 
 
 @router.post("/comunidades/{cid}/pagos/registrar", dependencies=[Depends(require_roles(*GESTION))])
@@ -269,11 +271,59 @@ def registrar_pago(cid: str, body: RegistrarPagoIn, payload: dict = Depends(usua
         raise HTTPException(400, "Este cobro ya está pagado.")
     cb.estado = "PAGADO"
     db.add(Pago(comunidad_id=cid, cobro_id=cb.id, unidad=cb.unidad, monto=cb.monto,
-                metodo=body.metodo, referencia="REG-%d" % random.randint(100, 999)))
+                metodo=body.metodo, referencia="REG-%d" % random.randint(100, 999),
+                fecha_pago=body.fecha_pago or hoy(), folio=body.folio))
     db.add(Movimiento(comunidad_id=cid, fecha=hoy(), tipo="INGRESO", categoria="Pagos del mes",
                       descripcion="Pago registrado %s · %s" % (cb.unidad, body.metodo), monto=cb.monto))
     db.commit()
     return {"ok": True}
+
+
+# ─────────────────────────── cobro individual ───────────────────────────
+class CobroIndividualIn(BaseModel):
+    unidad: str
+    motivo: str
+    monto: float
+    fecha_vencimiento: Optional[str] = None
+
+
+@router.post("/comunidades/{cid}/cobros/individual", dependencies=[Depends(require_roles(*GESTION))])
+def crear_cobro_individual(cid: str, body: CobroIndividualIn, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """Crea un cobro individual para una unidad específica."""
+    verificar_membresia(db, payload["sub"], cid)
+    c = db.get(Comunidad, cid)
+    
+    # Verificar que la unidad exista
+    existe_unidad = db.execute(
+        select(MiembroComunidad).where(
+            MiembroComunidad.comunidad_id == cid,
+            MiembroComunidad.unidad == body.unidad
+        )
+    ).scalar_one_or_none()
+    
+    if not existe_unidad:
+        raise HTTPException(404, f"La unidad {body.unidad} no existe en esta comunidad.")
+    
+    periodo = date.today().strftime("%Y-%m")
+    vencimiento = body.fecha_vencimiento or (date.today() + timedelta(days=10)).isoformat()
+    
+    cobro = Cobro(
+        comunidad_id=cid,
+        unidad=body.unidad,
+        periodo=periodo,
+        concepto=body.motivo,
+        monto=body.monto,
+        vencimiento=vencimiento
+    )
+    db.add(cobro)
+    db.commit()
+    db.refresh(cobro)
+    
+    # Notificación por correo
+    destinatarios = correos_miembros(db, cid, RESIDENTES)
+    mail.correo_nuevo_cobro(destinatarios, c.nombre, periodo, fmt_clp(body.monto), body.unidad, body.motivo)
+    
+    return {"ok": True, "cobro_id": cobro.id, "unidad": body.unidad, "monto": body.monto}
 
 
 # ─────────────────────────── transparencia ───────────────────────────

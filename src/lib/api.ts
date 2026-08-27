@@ -101,8 +101,11 @@ export const generarMes = (cid: string, periodo: string, monto: number, motivo =
 export const pagarCobro = (cid: string, cobroId: string) =>
   post<Pago>(`/api/comunidades/${cid}/pagos/cobro/${cobroId}`);
 
-export const registrarPagoVecino = (cid: string, cobroId: string, metodo: string) =>
-  post<{ ok: boolean }>(`/api/comunidades/${cid}/pagos/registrar`, { cobro_id: cobroId, metodo });
+export const registrarPagoVecino = (cid: string, cobroId: string, metodo: string, fechaPago?: string, folio?: string) =>
+  post<{ ok: boolean }>(`/api/comunidades/${cid}/pagos/registrar`, { cobro_id: cobroId, metodo, fecha_pago: fechaPago, folio });
+
+export const crearCobroIndividual = (cid: string, data: { unidad: string; motivo: string; monto: number; fechaVencimiento?: string }) =>
+  post<{ ok: boolean; cobro_id: string; unidad: string; monto: number }>(`/api/comunidades/${cid}/cobros/individual`, data);
 
 /* ─────────────── transparencia ─────────────── */
 export const crearMovimiento = (cid: string, data: { tipo: string; categoria: string; descripcion: string; monto: number; fecha: string }) =>
