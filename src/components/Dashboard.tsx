@@ -986,11 +986,11 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
         </div>
       </section>
 
-      {/* Sección de Votaciones */}
+      {/* Sección de Participación (Votaciones) */}
       <section>
         <div className="flex flex-wrap items-center gap-3">
           <div>
-            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Asambleas y votaciones</h2>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Participación</h2>
             <p className="text-[13px] text-ink3">Cada unidad vale un voto · resultados en tiempo real</p>
           </div>
           {esGestion && <Btn className="ml-auto" onClick={() => setModalNueva(true)}><Vote size={15} /> Abrir asamblea</Btn>}
@@ -1031,6 +1031,7 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
                 <input type="datetime-local" className="field" value={form.fin} onChange={(e) => setForm({ ...form, fin: e.target.value })} />
               </Field>
             </div>
+            <p className="text-xs text-ink3">Define el periodo durante el cual los residentes podrán emitir su voto. Si no se define, la votación estará abierta hasta que la cierres manualmente.</p>
             <div className="flex justify-end gap-2.5 border-t border-line pt-4">
               <Btn variant="ghost" onClick={() => setModalNueva(false)}>Cancelar</Btn>
               <Btn variant="neon" onClick={() => void crear()} disabled={busy}>{busy ? <Spinner /> : <>Abrir votación</>}</Btn>

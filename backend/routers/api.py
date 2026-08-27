@@ -9,7 +9,7 @@ import random
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -257,6 +257,8 @@ def pagar_cobro(cid: str, cobro_id: str, payload: dict = Depends(usuario_actual)
 class RegistrarPagoIn(BaseModel):
     cobro_id: str
     metodo: str
+    fecha_pago: Optional[str] = None
+    folio: Optional[str] = None
 
 
 @router.post("/comunidades/{cid}/pagos/registrar", dependencies=[Depends(require_roles(*GESTION))])
@@ -269,11 +271,59 @@ def registrar_pago(cid: str, body: RegistrarPagoIn, payload: dict = Depends(usua
         raise HTTPException(400, "Este cobro ya está pagado.")
     cb.estado = "PAGADO"
     db.add(Pago(comunidad_id=cid, cobro_id=cb.id, unidad=cb.unidad, monto=cb.monto,
-                metodo=body.metodo, referencia="REG-%d" % random.randint(100, 999)))
+                metodo=body.metodo, referencia="REG-%d" % random.randint(100, 999),
+                fecha_pago=body.fecha_pago or hoy(), folio=body.folio))
     db.add(Movimiento(comunidad_id=cid, fecha=hoy(), tipo="INGRESO", categoria="Pagos del mes",
                       descripcion="Pago registrado %s · %s" % (cb.unidad, body.metodo), monto=cb.monto))
     db.commit()
     return {"ok": True}
+
+
+# ─────────────────────────── cobro individual ───────────────────────────
+class CobroIndividualIn(BaseModel):
+    unidad: str
+    motivo: str
+    monto: float
+    fecha_vencimiento: Optional[str] = None
+
+
+@router.post("/comunidades/{cid}/cobros/individual", dependencies=[Depends(require_roles(*GESTION))])
+def crear_cobro_individual(cid: str, body: CobroIndividualIn, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """Crea un cobro individual para una unidad específica."""
+    verificar_membresia(db, payload["sub"], cid)
+    c = db.get(Comunidad, cid)
+    
+    # Verificar que la unidad exista
+    existe_unidad = db.execute(
+        select(MiembroComunidad).where(
+            MiembroComunidad.comunidad_id == cid,
+            MiembroComunidad.unidad == body.unidad
+        )
+    ).scalar_one_or_none()
+    
+    if not existe_unidad:
+        raise HTTPException(404, f"La unidad {body.unidad} no existe en esta comunidad.")
+    
+    periodo = date.today().strftime("%Y-%m")
+    vencimiento = body.fecha_vencimiento or (date.today() + timedelta(days=10)).isoformat()
+    
+    cobro = Cobro(
+        comunidad_id=cid,
+        unidad=body.unidad,
+        periodo=periodo,
+        concepto=body.motivo,
+        monto=body.monto,
+        vencimiento=vencimiento
+    )
+    db.add(cobro)
+    db.commit()
+    db.refresh(cobro)
+    
+    # Notificación por correo
+    destinatarios = correos_miembros(db, cid, RESIDENTES)
+    mail.correo_nuevo_cobro(destinatarios, c.nombre, periodo, fmt_clp(body.monto), body.unidad, body.motivo)
+    
+    return {"ok": True, "cobro_id": cobro.id, "unidad": body.unidad, "monto": body.monto}
 
 
 # ─────────────────────────── transparencia ───────────────────────────
@@ -435,6 +485,73 @@ def cancelar_reserva(cid: str, rid: str, payload: dict = Depends(usuario_actual)
     if r and r.comunidad_id == cid:
         db.delete(r)
         db.commit()
+    return {"ok": True}
+
+
+# ─────────────────────────── documentos de comunidad ───────────────────────────
+class DocumentoIn(BaseModel):
+    tipo: str  # ESTATUTO | REGLAMENTO | ACTA
+    nombre: Optional[str] = None
+
+
+@router.post("/comunidades/{cid}/documentos", dependencies=[Depends(require_roles(*GESTION))])
+def subir_documento(
+    cid: str,
+    tipo: str = Form(...),
+    nombre: str = Form(None),
+    archivo: UploadFile = File(...),
+    payload: dict = Depends(usuario_actual),
+    db: Session = Depends(get_db)
+):
+    """Sube un documento (estatuto, reglamento o acta) a la comunidad."""
+    verificar_membresia(db, payload["sub"], cid)
+    
+    # Validar tipo de documento
+    tipos_validos = ["ESTATUTO", "REGLAMENTO", "ACTA"]
+    if tipo.upper() not in tipos_validos:
+        raise HTTPException(400, f"Tipo de documento inválido. Debe ser uno de: {', '.join(tipos_validos)}")
+    
+    # Validar extensión del archivo
+    allowed_extensions = [".pdf", ".jpg", ".jpeg", ".png"]
+    file_ext = "." + archivo.filename.split(".")[-1].lower() if "." in archivo.filename else ""
+    if file_ext not in allowed_extensions:
+        raise HTTPException(400, f"Archivo no permitido. Extensiones válidas: {', '.join(allowed_extensions)}")
+    
+    # Leer contenido del archivo
+    content = archivo.file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB max
+        raise HTTPException(400, "El archivo excede el tamaño máximo de 10MB.")
+    
+    # Convertir a base64
+    import base64
+    data_url = f"data:{archivo.content_type};base64,{base64.b64encode(content).decode()}"
+    
+    # Crear documento
+    doc = DocumentoComunidad(
+        comunidad_id=cid,
+        tipo=tipo.upper(),
+        nombre=nombre or archivo.filename,
+        mime=archivo.content_type or "application/pdf",
+        tamano=len(content),
+        data_url=data_url,
+        subido_por=payload["sub"]
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    
+    return {"ok": True, "documentoId": doc.id, "nombre": doc.nombre, "tipo": doc.tipo}
+
+
+@router.delete("/comunidades/{cid}/documentos/{did}", dependencies=[Depends(require_roles(*GESTION))])
+def eliminar_documento(cid: str, did: str, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
+    """Elimina un documento de la comunidad."""
+    verificar_membresia(db, payload["sub"], cid)
+    doc = db.get(DocumentoComunidad, did)
+    if not doc or doc.comunidad_id != cid:
+        raise HTTPException(404, "Documento no encontrado.")
+    db.delete(doc)
+    db.commit()
     return {"ok": True}
 
 
