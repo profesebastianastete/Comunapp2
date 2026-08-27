@@ -4,9 +4,9 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  cancelarReserva, crearAviso, crearReserva, crearVotacion, datosComunidad, fmtCLP, fmtFecha,
-  fmtFechaHora, fmtMes, pagarCobro, ROL_LABEL, usuarioActual, votar,
-  type Aviso, type Cobro, type DatosComunidad, type Pago, type Reserva, type Sesion, type Votacion,
+  cancelarReserva, crearAviso, crearReserva, crearVotacion, datosComunidad, eliminarDocumento, fmtCLP, fmtFecha,
+  fmtFechaHora, fmtMes, pagarCobro, ROL_LABEL, subirDocumento, usuarioActual, votar,
+  type Aviso, type Cobro, type DatosComunidad, type DocumentoComunidad, type Pago, type Reserva, type Sesion, type Votacion,
 } from "../lib/store";
 import { Btn, Empty, EstadoTag, Field, Logo, Modal, ModalCambiarPassword, RolTag, Spinner, toast } from "./ui";
 import { FormMovimiento, ModuloBitacora, ModuloCobranza, ModuloInforme, ModuloPagosMes, ModuloSuscripciones, ModuloVecinos } from "./DashAdmin";
@@ -873,6 +873,7 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
   const [modalNueva, setModalNueva] = useState(false);
   const [form, setForm] = useState({ titulo: "", pregunta: "", opciones: "A favor;En contra;Abstención", inicio: "", fin: "" });
   const [busy, setBusy] = useState(false);
+  const [subiendo, setSubiendo] = useState<string | null>(null);
   const esGestion = sesion.rol === "ADMIN" || sesion.rol === "COMITE";
 
   const crear = async () => {
@@ -893,18 +894,92 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
     toast("Asamblea abierta. Los propietarios ya pueden votar.");
   };
 
+  const handleSubirDocumento = async (tipo: "ESTATUTO" | "REGLAMENTO" | "ACTA", file: File) => {
+    if (!file) return;
+    setSubiendo(tipo);
+    try {
+      const formData = new FormData();
+      formData.append("tipo", tipo);
+      formData.append("nombre", file.name);
+      formData.append("archivo", file);
+      await subirDocumento(datos.comunidad.id, formData);
+      await recargar();
+      toast(`Documento "${file.name}" subido correctamente.`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "No se pudo subir el documento.", "warn");
+    }
+    setSubiendo(null);
+  };
+
+  const handleEliminarDocumento = async (docId: string, nombre: string) => {
+    if (!confirm(`¿Eliminar "${nombre}"?`)) return;
+    try {
+      await eliminarDocumento(datos.comunidad.id, docId);
+      await recargar();
+      toast("Documento eliminado.");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "No se pudo eliminar el documento.", "warn");
+    }
+  };
+
   // Renderizado de documentos de la comunidad
   const documentos = datos.documentos ?? [];
   const estatutos = documentos.filter(d => d.tipo === "ESTATUTO");
   const reglamentos = documentos.filter(d => d.tipo === "REGLAMENTO");
   const actas = documentos.filter(d => d.tipo === "ACTA");
 
-  const descargarDocumento = (doc: any) => {
+  const descargarDocumento = (doc: DocumentoComunidad) => {
     const link = document.createElement("a");
     link.href = doc.dataUrl;
     link.download = doc.nombre;
     link.click();
   };
+
+  const DocumentoCard = ({ titulo, iconColor, docs, tipo }: { titulo: string; iconColor: string; docs: DocumentoComunidad[]; tipo: "ESTATUTO" | "REGLAMENTO" | "ACTA" }) => (
+    <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
+      <div className="flex items-center gap-2">
+        <FileDown className={iconColor} size={18} />
+        <h3 className="font-display text-lg font-bold text-ink">{titulo}</h3>
+      </div>
+      {docs.length === 0 ? (
+        <p className="mt-3 text-sm text-ink3">No hay {titulo.toLowerCase()} publicados.</p>
+      ) : (
+        <ul className="mt-3 space-y-2">
+          {docs.map(doc => (
+            <li key={doc.id} className="flex items-center justify-between text-sm">
+              <span className="truncate text-ink2">{doc.nombre}</span>
+              <div className="flex gap-1">
+                <button onClick={() => descargarDocumento(doc)} className="rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">
+                  Descargar
+                </button>
+                {esGestion && (
+                  <button onClick={() => handleEliminarDocumento(doc.id, doc.nombre)} className="rounded-lg border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
+                    Eliminar
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {esGestion && (
+        <div className="mt-4">
+          <label className="block cursor-pointer rounded-lg border border-dashed border-line px-3 py-2 text-center text-xs text-ink3 hover:bg-paper">
+            <input
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleSubirDocumento(tipo, file);
+              }}
+            />
+            {subiendo === tipo ? "Subiendo..." : `+ Subir ${titulo.toLowerCase()}`}
+          </label>
+        </div>
+      )}
+    </article>
+  );
 
   return (
     <div className="fade-swap space-y-6">
@@ -918,6 +993,11 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
         </div>
         
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <DocumentoCard titulo="Estatutos" iconColor="text-pine" docs={estatutos} tipo="ESTATUTO" />
+          <DocumentoCard titulo="Reglamentos" iconColor="text-pine" docs={reglamentos} tipo="REGLAMENTO" />
+          <DocumentoCard titulo="Actas" iconColor="text-pine" docs={actas} tipo="ACTA" />
+        </div>
+      </section>
           {/* Estatutos */}
           <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
             <div className="flex items-center gap-2">
