@@ -155,6 +155,10 @@ export interface RegistroAcceso {
   id: string; comunidadId: string; visitante: string; tipo: "VISITA" | "PROVEEDOR";
   unidad: string; entrada: string; salida: string | null;
 }
+export interface DocumentoComunidad {
+  id: string; comunidadId: string; tipo: "ESTATUTO" | "REGLAMENTO" | "ACTA";
+  nombre: string; mime: string; tamano: number; dataUrl: string; subidoPor: string; creado: string;
+}
 export interface FacturaSaaS {
   id: string; comunidadId: string; periodo: string; plan: string;
   monto: number; estado: "PAGADA" | "PENDIENTE" | "VENCIDA"; fecha: string;
@@ -290,6 +294,7 @@ export interface DatosComunidad {
   cobros: Cobro[]; pagos: Pago[]; movimientos: Movimiento[];
   avisos: Aviso[]; reservas: Reserva[]; votaciones: Votacion[]; bitacora: RegistroAcceso[];
   suscripciones: Suscripcion[];
+  documentos: DocumentoComunidad[];
 }
 
 export async function datosComunidad(comunidadId: string): Promise<DatosComunidad> {
@@ -412,3 +417,7 @@ export const verPassword = (usuarioId: string): Promise<{ disponible: boolean; p
 /* eliminar comunidad y planes públicos */
 export const eliminarComunidad = (comunidadId: string) => api.eliminarComunidad(comunidadId);
 export const planesPublicos = (): Promise<{ planes: Plan[] }> => api.planesPublicos();
+
+/* documentos de comunidad */
+export const subirDocumento = (comunidadId: string, formData: FormData) => api.subirDocumento(comunidadId, formData);
+export const eliminarDocumento = (comunidadId: string, documentoId: string) => api.eliminarDocumento(comunidadId, documentoId);

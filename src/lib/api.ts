@@ -5,7 +5,7 @@
  * en este módulo cuando VITE_API_URL está definida; si no, usa el modo demo
  * (localStorage). Así la misma app corre en ambos escenarios.
  */
-import type { FilaCSV, Pago, Sesion } from "./store";
+import type { FilaCSV, Pago, Sesion, DocumentoComunidad } from "./store";
 
 export const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "");
 export const apiMode = Boolean(API_URL);
@@ -253,6 +253,16 @@ export const restablecerPassword = (uid: string) =>
   post<{ ok: boolean; password_temporal: string }>(`/api/saas/usuarios/${uid}/restablecer-password`);
 export const verPassword = (uid: string) =>
   get<{ disponible: boolean; password_temporal: string | null }>(`/api/saas/usuarios/${uid}/ver-password`);
+
+/* ─────────────── documentos de comunidad ─────────────── */
+export const subirDocumento = (cid: string, formData: FormData) =>
+  http<{ ok: boolean; documentoId: string; nombre: string; tipo: string }>(`/api/comunidades/${cid}/documentos`, {
+    method: "POST",
+    body: formData,
+  });
+
+export const eliminarDocumento = (cid: string, documentoId: string) =>
+  del<{ ok: boolean }>(`/api/comunidades/${cid}/documentos/${documentoId}`);
 
 /* ─────────────── eliminar comunidad y planes públicos ─────────────── */
 export const eliminarComunidad = (cid: string) =>
