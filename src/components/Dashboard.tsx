@@ -13,7 +13,7 @@ import { FormMovimiento, ModuloBitacora, ModuloCobranza, ModuloInforme, ModuloPa
 import { generarReciboPDF } from "../lib/pdf";
 
 type Modulo =
-  | "tus-pagos" | "historial" | "transparencia" | "informe" | "avisos" | "reservas" | "votaciones"
+  | "tus-pagos" | "historial" | "transparencia" | "informe" | "avisos" | "reservas" | "participacion"
   | "pagos-mes" | "cobranza" | "suscripciones" | "vecinos" | "bitacora";
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -75,7 +75,7 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
       const recursos = datos?.comunidad.recursos ?? { reservas: true, bitacora: true };
       if (sesion.rol === "PROPIETARIO") {
         if (recursos.reservas) base.push({ id: "reservas" as Modulo, label: "Reservas", icon: CalendarDays });
-        base.push({ id: "votaciones" as Modulo, label: "Votaciones", icon: Vote });
+        base.push({ id: "participacion" as Modulo, label: "Participación", icon: Vote });
       }
       return base;
     }
@@ -88,7 +88,7 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
       { id: "suscripciones", label: "Pagos automáticos", icon: RefreshCw },
       { id: "avisos", label: "Muro de avisos", icon: Megaphone },
       ...(recursos.reservas ? [{ id: "reservas" as Modulo, label: "Reservas", icon: CalendarDays }] : []),
-      { id: "votaciones", label: "Votaciones", icon: Vote },
+      { id: "participacion", label: "Participación", icon: Vote },
       ...(esAdmin ? [{ id: "vecinos" as Modulo, label: "Vecinos", icon: ShieldCheck }] : []),
       ...(recursos.bitacora ? [{ id: "bitacora" as Modulo, label: "Control de acceso", icon: ShieldCheck }] : []),
     ];
@@ -328,8 +328,8 @@ export default function Dashboard({ sesion, salir }: { sesion: Sesion; salir: ()
             <ModuloAvisos datos={datos} puedePublicar={!esResidente} autor={usuario.nombre} recargar={recargar} />
           ) : modulo === "reservas" ? (
             <ModuloReservas datos={datos} sesion={sesion} usuarioNombre={usuario.nombre} recargar={recargar} />
-          ) : modulo === "votaciones" ? (
-            <ModuloVotaciones datos={datos} sesion={sesion} recargar={recargar} />
+          ) : modulo === "participacion" ? (
+            <ModuloParticipacion datos={datos} sesion={sesion} recargar={recargar} />
           ) : modulo === "pagos-mes" ? (
             <ModuloPagosMes datos={datos} sesion={sesion} recargar={recargar} />
           ) : modulo === "cobranza" ? (
@@ -868,71 +868,176 @@ function ModuloReservas({ datos, sesion, usuarioNombre, recargar }: { datos: Dat
 }
 
 /* ═══════════════════ VOTACIONES ═══════════════════ */
-function ModuloVotaciones({ datos, sesion, recargar }: { datos: DatosComunidad; sesion: Sesion; recargar: () => Promise<void> }) {
+function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunidad; sesion: Sesion; recargar: () => Promise<void> }) {
   const [votando, setVotando] = useState<string | null>(null);
   const [modalNueva, setModalNueva] = useState(false);
-  const [form, setForm] = useState({ titulo: "", pregunta: "", opciones: "A favor;En contra;Abstención" });
+  const [form, setForm] = useState({ titulo: "", pregunta: "", opciones: "A favor;En contra;Abstención", inicio: "", fin: "" });
   const [busy, setBusy] = useState(false);
   const esGestion = sesion.rol === "ADMIN" || sesion.rol === "COMITE";
 
   const crear = async () => {
-    const opciones = form.opciones.split(/[;,\n]/).map((o) => o.trim()).filter(Boolean);
+    const opciones = form.opciones.split(/[;\n]/).map((o) => o.trim()).filter(Boolean);
     if (!form.titulo.trim() || !form.pregunta.trim() || opciones.length < 2) {
       toast("Necesitas título, pregunta y al menos 2 opciones.", "warn");
       return;
     }
     setBusy(true);
-    await crearVotacion(datos.comunidad.id, { titulo: form.titulo, pregunta: form.pregunta, opciones });
+    const payload: any = { titulo: form.titulo, pregunta: form.pregunta, opciones };
+    if (form.inicio) payload.inicio = new Date(form.inicio).toISOString();
+    if (form.fin) payload.fin = new Date(form.fin).toISOString();
+    await crearVotacion(datos.comunidad.id, payload);
     await recargar();
     setBusy(false);
     setModalNueva(false);
-    setForm({ titulo: "", pregunta: "", opciones: "A favor;En contra;Abstención" });
+    setForm({ titulo: "", pregunta: "", opciones: "A favor;En contra;Abstención", inicio: "", fin: "" });
     toast("Asamblea abierta. Los propietarios ya pueden votar.");
   };
 
+  // Renderizado de documentos de la comunidad
+  const documentos = datos.documentos ?? [];
+  const estatutos = documentos.filter(d => d.tipo === "ESTATUTO");
+  const reglamentos = documentos.filter(d => d.tipo === "REGLAMENTO");
+  const actas = documentos.filter(d => d.tipo === "ACTA");
+
+  const descargarDocumento = (doc: any) => {
+    const link = document.createElement("a");
+    link.href = doc.dataUrl;
+    link.download = doc.nombre;
+    link.click();
+  };
+
   return (
-    <div className="fade-swap space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Asambleas y votaciones</h2>
-          <p className="text-[13px] text-ink3">Cada unidad vale un voto · resultados en tiempo real</p>
-        </div>
-        {esGestion && <Btn className="ml-auto" onClick={() => setModalNueva(true)}><Vote size={15} /> Abrir asamblea</Btn>}
-      </div>
-
-      {datos.votaciones.length === 0 ? (
-        <Empty title="Sin votaciones activas" sub="Cuando se abra una asamblea, podrás votar desde aquí." />
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {datos.votaciones.map((v) => (
-            <VotacionCard key={v.id} v={v} sesion={sesion} votando={votando} onVotar={async (opcion) => {
-              setVotando(v.id);
-              try {
-                await votar(datos.comunidad.id, v.id, sesion.unidad ?? "—", opcion);
-                await recargar();
-                toast("¡Voto registrado! Gracias por participar.");
-              } catch (e) {
-                toast(e instanceof Error ? e.message : "No se pudo votar.", "warn");
-              }
-              setVotando(null);
-            }} />
-          ))}
-        </div>
-      )}
-
-      <Modal open={modalNueva} onClose={() => setModalNueva(false)} title="Abrir una asamblea">
-        <div className="space-y-4">
-          <Field label="Título"><input className="field" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Ej: Pintura de fachada" /></Field>
-          <Field label="Pregunta"><textarea className="field min-h-[70px]" value={form.pregunta} onChange={(e) => setForm({ ...form, pregunta: e.target.value })} placeholder="¿Qué se somete a votación?" /></Field>
-          <Field label="Opciones" hint="separadas por punto y coma">
-            <input className="field" value={form.opciones} onChange={(e) => setForm({ ...form, opciones: e.target.value })} />
-          </Field>
-          <div className="flex justify-end gap-2.5 border-t border-line pt-4">
-            <Btn variant="ghost" onClick={() => setModalNueva(false)}>Cancelar</Btn>
-            <Btn variant="neon" onClick={() => void crear()} disabled={busy}>{busy ? <Spinner /> : <>Abrir votación</>}</Btn>
+    <div className="fade-swap space-y-6">
+      {/* Sección de Documentos */}
+      <section>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Documentos de la comunidad</h2>
+            <p className="text-[13px] text-ink3">Estatutos, reglamentos y actas oficiales</p>
           </div>
         </div>
-      </Modal>
+        
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          {/* Estatutos */}
+          <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
+            <div className="flex items-center gap-2">
+              <FileDown className="text-pine" size={18} />
+              <h3 className="font-display text-lg font-bold text-ink">Estatutos</h3>
+            </div>
+            {estatutos.length === 0 ? (
+              <p className="mt-3 text-sm text-ink3">No hay estatutos publicados.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {estatutos.map(doc => (
+                  <li key={doc.id} className="flex items-center justify-between text-sm">
+                    <span className="truncate text-ink2">{doc.nombre}</span>
+                    <button onClick={() => descargarDocumento(doc)} className="ml-2 rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">
+                      Descargar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          {/* Reglamentos */}
+          <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
+            <div className="flex items-center gap-2">
+              <FileDown className="text-pine" size={18} />
+              <h3 className="font-display text-lg font-bold text-ink">Reglamentos</h3>
+            </div>
+            {reglamentos.length === 0 ? (
+              <p className="mt-3 text-sm text-ink3">No hay reglamentos publicados.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {reglamentos.map(doc => (
+                  <li key={doc.id} className="flex items-center justify-between text-sm">
+                    <span className="truncate text-ink2">{doc.nombre}</span>
+                    <button onClick={() => descargarDocumento(doc)} className="ml-2 rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">
+                      Descargar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          {/* Actas */}
+          <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
+            <div className="flex items-center gap-2">
+              <FileDown className="text-pine" size={18} />
+              <h3 className="font-display text-lg font-bold text-ink">Actas</h3>
+            </div>
+            {actas.length === 0 ? (
+              <p className="mt-3 text-sm text-ink3">No hay actas publicadas.</p>
+            ) : (
+              <ul className="mt-3 space-y-2">
+                {actas.map(doc => (
+                  <li key={doc.id} className="flex items-center justify-between text-sm">
+                    <span className="truncate text-ink2">{doc.nombre}</span>
+                    <button onClick={() => descargarDocumento(doc)} className="ml-2 rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">
+                      Descargar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+        </div>
+      </section>
+
+      {/* Sección de Votaciones */}
+      <section>
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Asambleas y votaciones</h2>
+            <p className="text-[13px] text-ink3">Cada unidad vale un voto · resultados en tiempo real</p>
+          </div>
+          {esGestion && <Btn className="ml-auto" onClick={() => setModalNueva(true)}><Vote size={15} /> Abrir asamblea</Btn>}
+        </div>
+
+        {datos.votaciones.length === 0 ? (
+          <Empty title="Sin votaciones activas" sub="Cuando se abra una asamblea, podrás votar desde aquí." />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {datos.votaciones.map((v) => (
+              <VotacionCard key={v.id} v={v} sesion={sesion} votando={votando} onVotar={async (opcion) => {
+                setVotando(v.id);
+                try {
+                  await votar(datos.comunidad.id, v.id, sesion.unidad ?? "—", opcion);
+                  await recargar();
+                  toast("¡Voto registrado! Gracias por participar.");
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "No se pudo votar.", "warn");
+                }
+                setVotando(null);
+              }} />
+            ))}
+          </div>
+        )}
+
+        <Modal open={modalNueva} onClose={() => setModalNueva(false)} title="Abrir una asamblea">
+          <div className="space-y-4">
+            <Field label="Título"><input className="field" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Ej: Pintura de fachada" /></Field>
+            <Field label="Pregunta"><textarea className="field min-h-[70px]" value={form.pregunta} onChange={(e) => setForm({ ...form, pregunta: e.target.value })} placeholder="¿Qué se somete a votación?" /></Field>
+            <Field label="Opciones" hint="separadas por punto y coma">
+              <input className="field" value={form.opciones} onChange={(e) => setForm({ ...form, opciones: e.target.value })} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Inicio del periodo hábil" hint="opcional">
+                <input type="datetime-local" className="field" value={form.inicio} onChange={(e) => setForm({ ...form, inicio: e.target.value })} />
+              </Field>
+              <Field label="Fin del periodo hábil" hint="opcional">
+                <input type="datetime-local" className="field" value={form.fin} onChange={(e) => setForm({ ...form, fin: e.target.value })} />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-2.5 border-t border-line pt-4">
+              <Btn variant="ghost" onClick={() => setModalNueva(false)}>Cancelar</Btn>
+              <Btn variant="neon" onClick={() => void crear()} disabled={busy}>{busy ? <Spinner /> : <>Abrir votación</>}</Btn>
+            </div>
+          </div>
+        </Modal>
+      </section>
     </div>
   );
 }
@@ -941,6 +1046,14 @@ function VotacionCard({ v, sesion, votando, onVotar }: { v: Votacion; sesion: Se
   const yaVote = v.votos.some((x) => x.unidad === sesion.unidad);
   const puedeVotar = sesion.rol === "PROPIETARIO" && v.abierta && !yaVote;
   const total = Math.max(v.votos.length, 1);
+  
+  // Verificar periodo hábil
+  const ahora = new Date();
+  const inicio = v.inicio ? new Date(v.inicio) : null;
+  const fin = v.fin ? new Date(v.fin) : null;
+  const dentroPeriodo = (!inicio || ahora >= inicio) && (!fin || ahora <= fin);
+  const puedeVotarConPeriodo = puedeVotar && dentroPeriodo;
+  const fueraDePeriodo = puedeVotar && !dentroPeriodo;
 
   return (
     <article className="card-in rounded-2xl border border-line bg-card p-6 shadow-soft">
@@ -948,6 +1061,11 @@ function VotacionCard({ v, sesion, votando, onVotar }: { v: Votacion; sesion: Se
         <span className={"rounded-full px-2.5 py-1 font-mono text-[9.5px] font-bold uppercase tracking-[0.12em] " + (v.abierta ? "bg-neon/30 text-pine" : "bg-line/60 text-ink2")}>
           {v.abierta ? "Abierta" : "Cerrada"}
         </span>
+        {inicio && fin && (
+          <span className="rounded-full bg-paper px-2 py-0.5 font-mono text-[9px] uppercase text-ink3">
+            {fmtFechaHora(inicio)} - {fmtFechaHora(fin)}
+          </span>
+        )}
         <span className="ml-auto font-mono text-[10.5px] uppercase text-ink3">{fmtFecha(v.creado)}</span>
       </div>
       <h3 className="mt-3 font-display text-[20px] font-bold leading-tight text-ink">{v.titulo}</h3>
@@ -971,7 +1089,7 @@ function VotacionCard({ v, sesion, votando, onVotar }: { v: Votacion; sesion: Se
         })}
       </div>
 
-      {puedeVotar && (
+      {puedeVotarConPeriodo && (
         <div className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
           {v.opciones.map((o) => (
             <button
@@ -984,6 +1102,11 @@ function VotacionCard({ v, sesion, votando, onVotar }: { v: Votacion; sesion: Se
             </button>
           ))}
         </div>
+      )}
+      {fueraDePeriodo && (
+        <p className="mt-4 border-t border-line pt-4 font-mono text-[11px] text-ink3">
+          {ahora < inicio! ? "La votación aún no ha comenzado." : "La votación ha finalizado."}
+        </p>
       )}
       {yaVote && sesion.rol === "PROPIETARIO" && (
         <p className="mt-4 flex items-center gap-2 border-t border-line pt-4 text-[12.5px] font-semibold text-pine">

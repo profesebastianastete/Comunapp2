@@ -1,45 +1,28 @@
-# ─────────────────────────────────────────────────────────────
-# ComunApp · .gitignore
-# El backend ES parte del repositorio (se despliega en Railway).
-# Solo se excluyen artefactos generados, caches y secretos.
-# ─────────────────────────────────────────────────────────────
+# Examples 1:
+(empty — output nothing)
 
-# Dependencias de Node
-node_modules/
-
-# Build de producción del frontend (se regenera con: npm run build)
-dist/
-
-# ── Backend Python ───────────────────────────────────────────
-# Caches y bytecode
-__pycache__/
+# Example 2 (Project with artifacts):
+# Compiled and build artifacts
 *.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-
-# Entorno virtual local
+__pycache__/
+*.o
+*.obj
+dist/
+build/
+# Dependencies
 .venv/
 venv/
-backend/.venv/
-
-# Bases de datos locales (SQLite). En producción se usa PostgreSQL
-# y la cadena de conexión llega por la variable DATABASE_URL.
-*.db
-*.sqlite
-*.sqlite3
-backend/comunapp.db
-
-# Archivos de entorno locales (contienen secretos).
-# Las plantillas *.env.example SÍ se suben.
+node_modules/
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+# Environment
 .env
 .env.local
-backend/.env
-
-# ── Entorno y sistema ────────────────────────────────────────
-.DS_Store
-Thumbs.db
+.env.*
+# Editors
+.vscode/
+.idea/
+# Original rules preserved
 *.log
-.next/
-build/
-*.local

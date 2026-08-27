@@ -95,6 +95,8 @@ def votacion(x) -> dict:
     return {
         "id": x.id, "comunidadId": x.comunidad_id, "titulo": x.titulo, "pregunta": x.pregunta,
         "opciones": opciones, "abierta": x.abierta, "creado": iso(x.creado),
+        "inicio": iso(x.inicio) if x.inicio else None,
+        "fin": iso(x.fin) if x.fin else None,
         "votos": [{"unidad": v.unidad, "opcion": v.opcion} for v in x.votos],
     }
 

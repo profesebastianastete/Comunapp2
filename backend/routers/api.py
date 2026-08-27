@@ -19,7 +19,7 @@ import serializers as sz
 from auth import (comunidad_del_token, crear_token, es_hash_legado, get_usuario_db,
                   hash_password, require_roles, usuario_actual, verify_password)
 from database import get_db
-from models import (Aviso, Cobro, Comunidad, ConfigPlataforma, Factura, MiembroComunidad,
+from models import (Aviso, Cobro, Comunidad, ConfigPlataforma, DocumentoComunidad, Factura, MiembroComunidad,
                     Movimiento, Pago, Plan, RegistroAcceso, Reserva, Suscripcion, Usuario,
                     Votacion, Voto)
 
@@ -193,6 +193,11 @@ def datos(cid: str, payload: dict = Depends(usuario_actual), db: Session = Depen
         "cobros": todos(Cobro, sz.cobro), "pagos": todos(Pago, sz.pago),
         "movimientos": todos(Movimiento, sz.movimiento), "avisos": todos(Aviso, sz.aviso),
         "reservas": todos(Reserva, sz.reserva),
+        "documentos": todos(DocumentoComunidad, lambda d: {
+            "id": d.id, "comunidadId": d.comunidad_id, "tipo": d.tipo, "nombre": d.nombre,
+            "mime": d.mime, "tamano": d.tamano, "creado": iso(d.creado),
+            "subidoPor": d.subido_por,
+        }),
         "votaciones": [sz.votacion(v) for v in db.execute(
             select(Votacion).options(selectinload(Votacion.votos)).where(Votacion.comunidad_id == cid)).scalars().all()],
         "bitacora": todos(RegistroAcceso, sz.acceso),
@@ -437,13 +442,15 @@ class VotacionIn(BaseModel):
     titulo: str
     pregunta: str
     opciones: List[str]
+    inicio: Optional[datetime] = None  # Periodo hábil de inicio (opcional)
+    fin: Optional[datetime] = None     # Periodo hábil de fin (opcional)
 
 
 @router.post("/comunidades/{cid}/votaciones", dependencies=[Depends(require_roles(*GESTION))])
 def crear_votacion(cid: str, body: VotacionIn, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
     verificar_membresia(db, payload["sub"], cid)
     v = Votacion(comunidad_id=cid, titulo=body.titulo, pregunta=body.pregunta,
-                 opciones=json.dumps(body.opciones))
+                 opciones=json.dumps(body.opciones), inicio=body.inicio, fin=body.fin)
     db.add(v)
     db.commit()
     return sz.votacion(v)
@@ -461,6 +468,12 @@ def votar(cid: str, vid: str, body: VotarIn, payload: dict = Depends(usuario_act
                    .where(Votacion.id == vid, Votacion.comunidad_id == cid)).scalar_one_or_none()
     if not v:
         raise HTTPException(404, "Votación no encontrada.")
+    # Validar periodo hábil si está definido
+    ahora = datetime.utcnow()
+    if v.inicio and ahora < v.inicio:
+        raise HTTPException(400, "La votación aún no ha comenzado.")
+    if v.fin and ahora > v.fin:
+        raise HTTPException(400, "La votación ha finalizado.")
     if not v.abierta:
         raise HTTPException(400, "La votación ya está cerrada.")
     if any(x.unidad == body.unidad for x in v.votos):
