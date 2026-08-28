@@ -313,8 +313,8 @@ export const generarMes = (comunidadId: string, periodo: string, monto: number, 
   api.generarMes(comunidadId, periodo, monto, motivo);
 export const pagarCobro = (comunidadId: string, cobroId: string): Promise<Pago> =>
   api.pagarCobro(comunidadId, cobroId);
-export const registrarPagoVecino = (comunidadId: string, cobroId: string, metodo: string) =>
-  api.registrarPagoVecino(comunidadId, cobroId, metodo);
+export const registrarPagoVecino = (comunidadId: string, cobroId: string, metodo: string, fechaPago?: string, folio?: string, boletaUrl?: string) =>
+  api.registrarPagoVecino(comunidadId, cobroId, metodo, fechaPago, folio, boletaUrl);
 
 /* ── transparencia ──────────────────────────────────────────── */
 export const crearMovimiento = (comunidadId: string, data: { tipo: "INGRESO" | "GASTO"; categoria: string; descripcion: string; monto: number; fecha: string }) =>
@@ -394,8 +394,8 @@ export const toggleUsuarioActivo = (usuarioId: string): Promise<boolean> => api.
 export const confirmarEmail = (token: string) => api.confirmarEmail(token);
 
 /* validación por transferencia */
-export const validarTransferencia = (comunidadId: string, cobroId: string): Promise<Pago> =>
-  api.validarTransferencia(comunidadId, cobroId);
+export const validarTransferencia = (comunidadId: string, cobroId: string, fechaPago?: string, folio?: string, boletaUrl?: string): Promise<Pago> =>
+  api.validarTransferencia(comunidadId, cobroId, fechaPago, folio, boletaUrl);
 
 /* informe mensual */
 export const informe = (comunidadId: string, periodo: string): Promise<InformeAPI> =>

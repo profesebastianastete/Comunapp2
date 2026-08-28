@@ -922,7 +922,6 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
     }
   };
 
-  // Renderizado de documentos de la comunidad
   const documentos = datos.documentos ?? [];
   const estatutos = documentos.filter(d => d.tipo === "ESTATUTO");
   const reglamentos = documentos.filter(d => d.tipo === "REGLAMENTO");
@@ -935,10 +934,10 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
     link.click();
   };
 
-  const DocumentoCard = ({ titulo, iconColor, docs, tipo }: { titulo: string; iconColor: string; docs: DocumentoComunidad[]; tipo: "ESTATUTO" | "REGLAMENTO" | "ACTA" }) => (
+  const DocumentoCard = ({ titulo, docs, tipo }: { titulo: string; docs: DocumentoComunidad[]; tipo: "ESTATUTO" | "REGLAMENTO" | "ACTA" }) => (
     <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
       <div className="flex items-center gap-2">
-        <FileDown className={iconColor} size={18} />
+        <FileDown className="text-pine" size={18} />
         <h3 className="font-display text-lg font-bold text-ink">{titulo}</h3>
       </div>
       {docs.length === 0 ? (
@@ -949,13 +948,9 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
             <li key={doc.id} className="flex items-center justify-between text-sm">
               <span className="truncate text-ink2">{doc.nombre}</span>
               <div className="flex gap-1">
-                <button onClick={() => descargarDocumento(doc)} className="rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">
-                  Descargar
-                </button>
+                <button onClick={() => descargarDocumento(doc)} className="rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">Descargar</button>
                 {esGestion && (
-                  <button onClick={() => handleEliminarDocumento(doc.id, doc.nombre)} className="rounded-lg border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
-                    Eliminar
-                  </button>
+                  <button onClick={() => handleEliminarDocumento(doc.id, doc.nombre)} className="rounded-lg border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Eliminar</button>
                 )}
               </div>
             </li>
@@ -963,110 +958,26 @@ function ModuloParticipacion({ datos, sesion, recargar }: { datos: DatosComunida
         </ul>
       )}
       {esGestion && (
-        <div className="mt-4">
-          <label className="block cursor-pointer rounded-lg border border-dashed border-line px-3 py-2 text-center text-xs text-ink3 hover:bg-paper">
-            <input
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleSubirDocumento(tipo, file);
-              }}
-            />
-            {subiendo === tipo ? "Subiendo..." : `+ Subir ${titulo.toLowerCase()}`}
-          </label>
-        </div>
+        <label className="mt-4 block cursor-pointer rounded-lg border border-dashed border-line px-3 py-2 text-center text-xs text-ink3 hover:bg-paper">
+          <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) handleSubirDocumento(tipo, file); }} />
+          {subiendo === tipo ? "Subiendo..." : `+ Subir ${titulo.toLowerCase()}`}
+        </label>
       )}
     </article>
   );
 
   return (
     <div className="fade-swap space-y-6">
-      {/* Sección de Documentos */}
       <section>
-        <div className="flex items-center gap-3">
-          <div>
-            <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Documentos de la comunidad</h2>
-            <p className="text-[13px] text-ink3">Estatutos, reglamentos y actas oficiales</p>
-          </div>
-        </div>
-        
+        <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Documentos de la comunidad</h2>
+        <p className="text-[13px] text-ink3">Estatutos, reglamentos y actas oficiales</p>
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
-          <DocumentoCard titulo="Estatutos" iconColor="text-pine" docs={estatutos} tipo="ESTATUTO" />
-          <DocumentoCard titulo="Reglamentos" iconColor="text-pine" docs={reglamentos} tipo="REGLAMENTO" />
-          <DocumentoCard titulo="Actas" iconColor="text-pine" docs={actas} tipo="ACTA" />
-        </div>
-      </section>
-          {/* Estatutos */}
-          <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
-            <div className="flex items-center gap-2">
-              <FileDown className="text-pine" size={18} />
-              <h3 className="font-display text-lg font-bold text-ink">Estatutos</h3>
-            </div>
-            {estatutos.length === 0 ? (
-              <p className="mt-3 text-sm text-ink3">No hay estatutos publicados.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {estatutos.map(doc => (
-                  <li key={doc.id} className="flex items-center justify-between text-sm">
-                    <span className="truncate text-ink2">{doc.nombre}</span>
-                    <button onClick={() => descargarDocumento(doc)} className="ml-2 rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">
-                      Descargar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
-
-          {/* Reglamentos */}
-          <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
-            <div className="flex items-center gap-2">
-              <FileDown className="text-pine" size={18} />
-              <h3 className="font-display text-lg font-bold text-ink">Reglamentos</h3>
-            </div>
-            {reglamentos.length === 0 ? (
-              <p className="mt-3 text-sm text-ink3">No hay reglamentos publicados.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {reglamentos.map(doc => (
-                  <li key={doc.id} className="flex items-center justify-between text-sm">
-                    <span className="truncate text-ink2">{doc.nombre}</span>
-                    <button onClick={() => descargarDocumento(doc)} className="ml-2 rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">
-                      Descargar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
-
-          {/* Actas */}
-          <article className="card-in rounded-2xl border border-line bg-card p-5 shadow-soft">
-            <div className="flex items-center gap-2">
-              <FileDown className="text-pine" size={18} />
-              <h3 className="font-display text-lg font-bold text-ink">Actas</h3>
-            </div>
-            {actas.length === 0 ? (
-              <p className="mt-3 text-sm text-ink3">No hay actas publicadas.</p>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {actas.map(doc => (
-                  <li key={doc.id} className="flex items-center justify-between text-sm">
-                    <span className="truncate text-ink2">{doc.nombre}</span>
-                    <button onClick={() => descargarDocumento(doc)} className="ml-2 rounded-lg border border-line px-2 py-1 text-xs hover:bg-paper">
-                      Descargar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </article>
+          <DocumentoCard titulo="Estatutos" docs={estatutos} tipo="ESTATUTO" />
+          <DocumentoCard titulo="Reglamentos" docs={reglamentos} tipo="REGLAMENTO" />
+          <DocumentoCard titulo="Actas" docs={actas} tipo="ACTA" />
         </div>
       </section>
 
-      {/* Sección de Participación (Votaciones) */}
       <section>
         <div className="flex flex-wrap items-center gap-3">
           <div>

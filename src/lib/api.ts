@@ -101,8 +101,8 @@ export const generarMes = (cid: string, periodo: string, monto: number, motivo =
 export const pagarCobro = (cid: string, cobroId: string) =>
   post<Pago>(`/api/comunidades/${cid}/pagos/cobro/${cobroId}`);
 
-export const registrarPagoVecino = (cid: string, cobroId: string, metodo: string, fechaPago?: string, folio?: string) =>
-  post<{ ok: boolean }>(`/api/comunidades/${cid}/pagos/registrar`, { cobro_id: cobroId, metodo, fecha_pago: fechaPago, folio });
+export const registrarPagoVecino = (cid: string, cobroId: string, metodo: string, fechaPago?: string, folio?: string, boletaUrl?: string) =>
+  post<{ ok: boolean }>(`/api/comunidades/${cid}/pagos/registrar`, { cobro_id: cobroId, metodo, fecha_pago: fechaPago, folio, boleta_url: boletaUrl });
 
 export const crearCobroIndividual = (cid: string, data: { unidad: string; motivo: string; monto: number; fechaVencimiento?: string }) =>
   post<{ ok: boolean; cobro_id: string; unidad: string; monto: number }>(`/api/comunidades/${cid}/cobros/individual`, data);
@@ -227,8 +227,8 @@ export const cobrarFacturaMP = (facturaId: string) =>
 export const confirmarEmail = (token: string) => post<{ ok: boolean }>("/api/auth/confirmar-email", { token });
 
 /* ─────────────── validación por transferencia ─────────────── */
-export const validarTransferencia = (cid: string, cobroId: string) =>
-  post<import("./store").Pago>(`/api/comunidades/${cid}/pagos/validar-transferencia`, { cobro_id: cobroId });
+export const validarTransferencia = (cid: string, cobroId: string, fechaPago?: string, folio?: string, boletaUrl?: string) =>
+  post<import("./store").Pago>(`/api/comunidades/${cid}/pagos/validar-transferencia`, { cobro_id: cobroId, fecha_pago: fechaPago, folio, boleta_url: boletaUrl });
 
 /* ─────────────── informe mensual ─────────────── */
 export const informe = (cid: string, periodo: string) =>
