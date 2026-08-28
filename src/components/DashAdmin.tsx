@@ -1,7 +1,7 @@
 import {
   AlertTriangle, Building2, CheckCircle2, Coins, Copy, CreditCard, DoorOpen, ExternalLink, Eye,
   FileDown, FileSpreadsheet, KeyRound, Landmark, Link2, Mail, PlugZap, PlusCircle, RefreshCw,
-  Search, ShieldCheck, UploadCloud, Users, Wallet, XCircle,
+  Search, ShieldCheck, UploadCloud, Users, Wallet, XCircle, Calendar, UserPen,
 } from "lucide-react";
 import { useMemo, useRef, useState, type DragEvent } from "react";
 import {
@@ -59,10 +59,10 @@ export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComuni
     toast("Pago registrado. El estado de cuenta del vecino se actualizó.");
   };
 
-  const validarTransferencia = async (cobroId: string) => {
+  const validarTransferencia = async (cobroId: string, fecha?: string, folio?: string, boleta?: string) => {
     setValidando(cobroId);
     try {
-      await validarTransferenciaFn(datos.comunidad.id, cobroId);
+      await validarTransferenciaFn(datos.comunidad.id, cobroId, fecha, folio, boleta);
       await recargar();
       toast("Transferencia validada. El cobro quedó como pagado.");
     } catch (e) {
