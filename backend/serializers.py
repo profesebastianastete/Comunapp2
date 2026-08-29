@@ -96,6 +96,8 @@ def votacion(x) -> dict:
         "id": x.id, "comunidadId": x.comunidad_id, "titulo": x.titulo, "pregunta": x.pregunta,
         "opciones": opciones, "abierta": x.abierta, "creado": iso(x.creado),
         "votos": [{"unidad": v.unidad, "opcion": v.opcion} for v in x.votos],
+        "inicio": iso(x.inicio) if x.inicio else None,
+        "fin": iso(x.fin) if x.fin else None,
     }
 
 
@@ -103,6 +105,14 @@ def acceso(x) -> dict:
     return {
         "id": x.id, "comunidadId": x.comunidad_id, "visitante": x.visitante, "tipo": x.tipo,
         "unidad": x.unidad, "entrada": iso(x.entrada), "salida": iso(x.salida) if x.salida else None,
+    }
+
+
+def documento_comunidad(x) -> dict:
+    return {
+        "id": x.id, "comunidadId": x.comunidad_id, "tipo": x.tipo,
+        "nombre": x.nombre, "mime": x.mime, "tamano": x.tamano,
+        "data_url": x.data_url, "subido_por": x.subido_por, "creado": iso(x.creado),
     }
 
 

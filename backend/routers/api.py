@@ -19,7 +19,7 @@ import serializers as sz
 from auth import (comunidad_del_token, crear_token, es_hash_legado, get_usuario_db,
                   hash_password, require_roles, usuario_actual, verify_password)
 from database import get_db
-from models import (Aviso, Cobro, Comunidad, ConfigPlataforma, Factura, MiembroComunidad,
+from models import (Aviso, Cobro, Comunidad, ConfigPlataforma, DocumentoComunidad, Factura, MiembroComunidad,
                     Movimiento, Pago, Plan, RegistroAcceso, Reserva, Suscripcion, Usuario,
                     Votacion, Voto)
 
@@ -197,6 +197,7 @@ def datos(cid: str, payload: dict = Depends(usuario_actual), db: Session = Depen
             select(Votacion).options(selectinload(Votacion.votos)).where(Votacion.comunidad_id == cid)).scalars().all()],
         "bitacora": todos(RegistroAcceso, sz.acceso),
         "suscripciones": todos(Suscripcion, sz.suscripcion),
+        "documentos": todos(DocumentoComunidad, sz.documento_comunidad),
     }
 
 
@@ -437,13 +438,19 @@ class VotacionIn(BaseModel):
     titulo: str
     pregunta: str
     opciones: List[str]
+    inicio: Optional[str] = None  # ISO datetime
+    fin: Optional[str] = None     # ISO datetime
 
 
 @router.post("/comunidades/{cid}/votaciones", dependencies=[Depends(require_roles(*GESTION))])
 def crear_votacion(cid: str, body: VotacionIn, payload: dict = Depends(usuario_actual), db: Session = Depends(get_db)):
     verificar_membresia(db, payload["sub"], cid)
-    v = Votacion(comunidad_id=cid, titulo=body.titulo, pregunta=body.pregunta,
-                 opciones=json.dumps(body.opciones))
+    v = Votacion(
+        comunidad_id=cid, titulo=body.titulo, pregunta=body.pregunta,
+        opciones=json.dumps(body.opciones),
+        inicio=datetime.fromisoformat(body.inicio) if body.inicio else None,
+        fin=datetime.fromisoformat(body.fin) if body.fin else None
+    )
     db.add(v)
     db.commit()
     return sz.votacion(v)
