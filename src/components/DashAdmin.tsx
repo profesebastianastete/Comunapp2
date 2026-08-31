@@ -15,6 +15,9 @@ import { generarInformePDF } from "../lib/pdf";
 import { Btn, CountUp, Empty, EstadoTag, Field, Modal, RolTag, Spinner, StatCard, toast } from "./ui";
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const Card = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+  <div className={`rounded-2xl border border-line bg-card shadow-soft ${className}`}>{children}</div>
+);
 
 /* ════════ PAGOS DEL MES (cobranza) ════════ */
 export function ModuloPagosMes({ datos, sesion, recargar }: { datos: DatosComunidad; sesion: Sesion; recargar: () => Promise<void> }) {
