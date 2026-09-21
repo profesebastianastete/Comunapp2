@@ -1,84 +1,84 @@
 =============================================================
-  COMUNAPP — GUÍA RÁPIDA DE INICIO (modo real)
+  COMUNAPP — QUICK START GUIDE (production mode)
 =============================================================
 
-ComunApp funciona contra su API (FastAPI + PostgreSQL). No hay
-modo demo: todo dato viene de la base de datos.
+ComunApp works with its API (FastAPI + PostgreSQL). There is no
+demo mode: all data comes from the database.
 
 -------------------------------------------------------------
-1) REQUISITOS
+1) REQUIREMENTS
 -------------------------------------------------------------
-  · Python 3.10 o superior   →  python.org  (marca "Add to PATH")
-  · Node 20 o superior       →  nodejs.org
+  · Python 3.10 or higher      →  python.org  (check "Add to PATH")
+  · Node 20 or higher          →  nodejs.org
 
 -------------------------------------------------------------
-2) LEVANTAR EL BACKEND (API)
+2) START THE BACKEND (API)
 -------------------------------------------------------------
   cd backend
   python3 -m venv .venv
   source .venv/bin/activate          (Windows: .venv\Scripts\activate)
   pip install -r requirements.txt
-  python3 seed.py                    (siembra datos demo; seguro de repetir)
+  python3 seed.py                    (seeds demo data; safe to repeat)
   python3 -m uvicorn main:app --port 8000
 
-  La API queda en:  http://127.0.0.1:8000
-  Documentación:    http://127.0.0.1:8000/docs
-  (Sin DATABASE_URL usa SQLite en backend/comunapp.db)
+  API available at:  http://127.0.0.1:8000
+  Documentation:     http://127.0.0.1:8000/docs
+  (Without DATABASE_URL uses SQLite in backend/comunapp.db)
 
 -------------------------------------------------------------
-3) LEVANTAR EL FRONTEND
+3) START THE FRONTEND
 -------------------------------------------------------------
-  (en la raíz del proyecto)
+  (in the project root)
   npm install
-  Crea un archivo .env.local con esta línea:
+  Create a .env.local file with this line:
         VITE_API_URL=http://127.0.0.1:8000
   npm run dev
 
-  Abre el navegador en la URL que te indique Vite
-  (normalmente http://localhost:5173)
+  Open your browser at the URL indicated by Vite
+  (usually http://localhost:5173)
 
 -------------------------------------------------------------
-4) CUENTA INICIAL (no hay datos demo)
+4) INITIAL ACCOUNT (no demo data)
 -------------------------------------------------------------
   SUPERADMIN      equipo@comunapp.cl        admin123
 
-  El superadmin entra al panel interno en la ruta /adminapp
-  (escríbela directo en la URL; no hay enlaces hacia ella).
-  Desde ahí crea las comunidades reales y sus usuarios.
+  The superadmin accesses the internal panel at /adminapp
+  (type it directly in the URL; there are no links to it).
+  From there, create real communities and their users.
 
-  Si tu base viene de un despliegue antiguo con comunidades
-  demo, límpialas con:  python3 seed.py --clean-demo
+  If your database comes from an old deployment with demo
+  communities, clean them with:  python3 seed.py --clean-demo
 
 -------------------------------------------------------------
-5) SI ALGO FALLA
+5) IF SOMETHING GOES WRONG
 -------------------------------------------------------------
-  · "Contraseña no reconocida"  →  python3 seed.py --reset-passwords
-  · "No se pudo conectar con el servidor"
-        Revisa que el backend esté corriendo (paso 2) y que
-        VITE_API_URL apunte a http://127.0.0.1:8000
-  · El dashboard se queda en "Cargando tu comunidad…" o da error
-        de base de datos (columna faltante) tras un despliegue:
+  · "Password not recognized"  →  python3 seed.py --reset-passwords
+  · "Could not connect to server"
+        Check that the backend is running (step 2) and that
+        VITE_API_URL points to http://127.0.0.1:8000
+  · Dashboard stuck on "Loading your community…" or gives a
+        database error (missing column) after deployment:
             python3 migrate.py
-        (agrega las columnas nuevas que falten; es idempotente)
-  · En Railway: sigue docs/DESPLIEGUE.md
+        (adds new missing columns; idempotent)
+  · In Railway: follow docs/DEPLOYMENT.md
 
 -------------------------------------------------------------
-PRODUCCIÓN EN RAILWAY (URLs vigentes)
+PRODUCTION ON RAILWAY (current URLs)
 -------------------------------------------------------------
   Frontend   https://comunapp-comunap.up.railway.app
   Backend    https://backend-comunapp.up.railway.app
-  Salud      https://backend-comunapp.up.railway.app/health
-  Diagnóstico https://backend-comunapp.up.railway.app/api/diagnostico
+  Health     https://backend-comunapp.up.railway.app/health
+  Diagnostics https://backend-comunapp.up.railway.app/api/diagnostico
 
-  El frontend usa la variable VITE_API_URL =
-  https://backend-comunapp.up.railway.app (redeploy tras cambiarla).
+  The frontend uses the variable VITE_API_URL =
+  https://backend-comunapp.up.railway.app (redeploy after changing it).
 
 -------------------------------------------------------------
-MÁS DOCUMENTACIÓN (carpeta docs/)
+MORE DOCUMENTATION (docs/ folder)
 -------------------------------------------------------------
-  DESPLIEGUE.md      Subir a Railway paso a paso
-  MERCADO_PAGO.md    Pagos, comisiones y suscripciones
-  API.md             Referencia de endpoints
-  CREDENCIALES.md    Cuentas, roles y recuperación
-  ESCALABILIDAD.md   Planes de Railway y límites
+  DEPLOYMENT.md      Deploy to Railway step by step
+  MERCADO_PAGO.md    Payments, commissions and subscriptions
+  API.md             Endpoint reference
+  CREDENTIALS.md     Accounts, roles and recovery
+  SCALABILITY.md     Railway plans and limits
 =============================================================
