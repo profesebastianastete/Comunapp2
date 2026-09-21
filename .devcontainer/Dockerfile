@@ -22,10 +22,6 @@ COPY package*.json ./
 # Install npm dependencies
 RUN npm ci
 
-# Copy Python requirements and install them
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip3 install --no-cache-dir -r backend/requirements.txt
-
 # Copy the rest of the project files
 COPY . .
 
