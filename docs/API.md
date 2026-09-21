@@ -1,109 +1,109 @@
-# Referencia de la API
+# API Reference
 
-Backend FastAPI de ComunApp. Base URL: la definida en `VITE_API_URL` (o `http://127.0.0.1:8000` en local). Documentación interactiva en `/docs` (Swagger).
+ComunApp FastAPI Backend. Base URL: defined in `VITE_API_URL` (or `http://127.0.0.1:8000` locally). Interactive documentation at `/docs` (Swagger).
 
-**Autenticación:** todos los endpoints protegidos esperan el header `Authorization: Bearer <token>`, obtenido en `POST /api/auth/login`. Los roles se validan con guardas RBAC:
+**Authentication:** all protected endpoints expect header `Authorization: Bearer <token>`, obtained from `POST /api/auth/login`. Roles validated with RBAC guards:
 
 - `GESTION` = `ADMIN`, `COMITE`
 - `RESIDENTES` = `PROPIETARIO`, `ARRENDATARIO`
 
-El **multi-tenant** se garantiza porque cada consulta filtra por `comunidad_id` y los roles de comunidad solo pueden operar sobre la suya.
+**Multi-tenant** is guaranteed because every query filters by `comunidad_id` and community roles can only operate on their own.
 
 ---
 
-## Autenticación
+## Authentication
 
-| Método | Endpoint | Roles | Descripción |
+| Method | Endpoint | Roles | Description |
 |---|---|---|---|
-| POST | `/api/auth/login` | público | Devuelve token JWT + sesión |
-| GET | `/api/me` | autenticado | Perfil del usuario actual |
-| POST | `/api/auth/cambiar-password` | autenticado | Cambia la contraseña propia (pide la actual) |
+| POST | `/api/auth/login` | public | Returns JWT token + session |
+| GET | `/api/me` | authenticated | Current user profile |
+| POST | `/api/auth/cambiar-password` | authenticated | Changes own password (requires current) |
 
-## Comunidad (requieren membresía)
+## Community (requires membership)
 
-| Método | Endpoint | Roles | Descripción |
+| Method | Endpoint | Roles | Description |
 |---|---|---|---|
-| GET | `/api/comunidades/{cid}/datos` | autenticado | Todo el estado de la comunidad (cobros, pagos, movimientos, avisos, reservas, votaciones, bitácora, suscripciones) |
-| POST | `/api/comunidades/{cid}/cobros/generar` | GESTION | Genera los pagos del mes para todas las unidades |
-| POST | `/api/comunidades/{cid}/pagos/cobro/{cobro_id}` | RESIDENTES | Un vecino paga su cobro (Mercado Pago) |
-| POST | `/api/comunidades/{cid}/pagos/registrar` | GESTION | El admin registra un pago manual |
-| POST | `/api/comunidades/{cid}/movimientos` | GESTION | Registra un gasto/ingreso (Transparencia) |
-| POST | `/api/comunidades/{cid}/importar` | GESTION | Importa la comunidad desde CSV |
-| POST | `/api/comunidades/{cid}/avisos` | GESTION | Publica un aviso |
-| POST | `/api/comunidades/{cid}/reservas` | RESIDENTES, GESTION | Reserva un espacio común |
-| DELETE | `/api/comunidades/{cid}/reservas/{rid}` | RESIDENTES, GESTION | Cancela una reserva |
-| POST | `/api/comunidades/{cid}/votaciones` | GESTION | Crea una votación |
-| POST | `/api/comunidades/{cid}/votaciones/{vid}/votar` | RESIDENTES | Emite un voto (1 por unidad) |
-| POST | `/api/comunidades/{cid}/accesos` | GESTION | Registra una visita/proveedor |
-| POST | `/api/comunidades/{cid}/accesos/{rid}/salida` | GESTION | Marca la salida |
-| POST | `/api/comunidades/{cid}/vecinos` | ADMIN | Crea un vecino con acceso |
+| GET | `/api/comunidades/{cid}/datos` | authenticated | Entire community state (collections, payments, movements, notices, reservations, voting, log, subscriptions) |
+| POST | `/api/comunidades/{cid}/cobros/generar` | GESTION | Generates monthly payments for all units |
+| POST | `/api/comunidades/{cid}/pagos/cobro/{cobro_id}` | RESIDENTES | Neighbor pays their collection (Mercado Pago) |
+| POST | `/api/comunidades/{cid}/pagos/registrar` | GESTION | Admin registers manual payment |
+| POST | `/api/comunidades/{cid}/movimientos` | GESTION | Registers expense/income (Transparency) |
+| POST | `/api/comunidades/{cid}/importar` | GESTION | Imports community from CSV |
+| POST | `/api/comunidades/{cid}/avisos` | GESTION | Publishes a notice |
+| POST | `/api/comunidades/{cid}/reservas` | RESIDENTES, GESTION | Reserves a common space |
+| DELETE | `/api/comunidades/{cid}/reservas/{rid}` | RESIDENTES, GESTION | Cancels a reservation |
+| POST | `/api/comunidades/{cid}/votaciones` | GESTION | Creates a vote |
+| POST | `/api/comunidades/{cid}/votaciones/{vid}/votar` | RESIDENTES | Casts a vote (1 per unit) |
+| POST | `/api/comunidades/{cid}/accesos` | GESTION | Registers a visitor/provider |
+| POST | `/api/comunidades/{cid}/accesos/{rid}/salida` | GESTION | Marks departure |
+| POST | `/api/comunidades/{cid}/vecinos` | ADMIN | Creates a neighbor with access |
 
-## Mercado Pago (comunidad)
+## Mercado Pago (community)
 
-| Método | Endpoint | Roles | Descripción |
+| Method | Endpoint | Roles | Description |
 |---|---|---|---|
-| POST | `/api/comunidades/{cid}/mp/configurar` | ADMIN | Guarda Access Token y Public Key de la comunidad |
-| POST | `/api/comunidades/{cid}/mp/probar` | ADMIN, COMITE | Verifica la conexión contra `/users/me` |
-| POST | `/api/comunidades/{cid}/mp/desvincular` | ADMIN | Borra las credenciales |
-| POST | `/api/comunidades/{cid}/mp/cobros` | ADMIN | Crea un punto de pago (Checkout Pro) con el 5% de comisiones |
-| POST | `/api/comunidades/{cid}/suscripciones` | GESTION | Crea una suscripción mensual (preapproval, solo tarjeta) |
-| POST | `/api/comunidades/{cid}/suscripciones/{sid}/cancelar` | GESTION | Cancela una suscripción |
+| POST | `/api/comunidades/{cid}/mp/configurar` | ADMIN | Saves community Access Token and Public Key |
+| POST | `/api/comunidades/{cid}/mp/probar` | ADMIN, COMITE | Verifies connection against `/users/me` |
+| POST | `/api/comunidades/{cid}/mp/desvincular` | ADMIN | Deletes credentials |
+| POST | `/api/comunidades/{cid}/mp/cobros` | ADMIN | Creates payment point (Checkout Pro) with 5% commissions |
+| POST | `/api/comunidades/{cid}/suscripciones` | GESTION | Creates monthly subscription (preapproval, credit card only) |
+| POST | `/api/comunidades/{cid}/suscripciones/{sid}/cancelar` | GESTION | Cancels a subscription |
 
 ## Webhook
 
-| Método | Endpoint | Roles | Descripción |
+| Method | Endpoint | Roles | Description |
 |---|---|---|---|
-| POST | `/api/mp/webhook` | público (verificado con MP) | Recibe notificaciones de pago y concilia |
+| POST | `/api/mp/webhook` | public (verified with MP) | Receives payment notifications and reconciles |
 
 ## SaaS / Superadmin
 
-Todos requieren rol `SUPERADMIN`.
+All require `SUPERADMIN` role.
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/api/saas/listado` | Comunidades, usuarios, facturas, planes, métricas y configuración de plataforma |
-| POST | `/api/saas/comunidades` | Crea una comunidad (tenant) + su admin |
-| POST | `/api/saas/comunidades/{cid}/toggle-estado` | Activa/suspende una comunidad |
-| POST | `/api/saas/usuarios` | Crea un usuario en cualquier rol |
-| POST | `/api/saas/usuarios/{uid}/password` | Redefine la contraseña de un usuario |
-| POST | `/api/saas/usuarios/{uid}/toggle-activo` | Activa/suspende un usuario |
-| POST | `/api/saas/facturas/generar` | Genera la facturación mensual a las comunidades |
-| POST | `/api/saas/facturas/{fid}/pagar` | Marca una factura como pagada |
-| POST | `/api/saas/facturas/{fid}/cobrar-mp` | Punto de pago MP por la factura (con 5%) |
-| POST | `/api/saas/facturas/{fid}/suscribir-mp` | Suscripción mensual de la comunidad (con 5%) |
+| GET | `/api/saas/listado` | Communities, users, invoices, plans, metrics and platform configuration |
+| POST | `/api/saas/comunidades` | Creates a community (tenant) + its admin |
+| POST | `/api/saas/comunidades/{cid}/toggle-estado` | Activates/suspends a community |
+| POST | `/api/saas/usuarios` | Creates a user in any role |
+| POST | `/api/saas/usuarios/{uid}/password` | Redefines a user's password |
+| POST | `/api/saas/usuarios/{uid}/toggle-activo` | Activates/suspends a user |
+| POST | `/api/saas/facturas/generar` | Generates monthly billing to communities |
+| POST | `/api/saas/facturas/{fid}/pagar` | Marks an invoice as paid |
+| POST | `/api/saas/facturas/{fid}/cobrar-mp` | MP payment point for invoice (with 5%) |
+| POST | `/api/saas/facturas/{fid}/suscribir-mp` | Monthly community subscription (with 5%) |
 
-## Planes (Superadmin)
+## Plans (Superadmin)
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/saas/planes` | Crea un plan (nombre + precio) |
-| POST | `/api/saas/planes/{pid}` | Edita nombre/precio/estado de un plan |
-| DELETE | `/api/saas/planes/{pid}` | Elimina un plan (si no tiene comunidades asignadas) |
+| POST | `/api/saas/planes` | Creates a plan (name + price) |
+| POST | `/api/saas/planes/{pid}` | Edits name/price/status of a plan |
+| DELETE | `/api/saas/planes/{pid}` | Deletes a plan (if no communities assigned) |
 
-## Cuenta Mercado Pago de la plataforma (Superadmin)
+## Platform Mercado Pago account (Superadmin)
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/saas/mp-plataforma/configurar` | Guarda las credenciales de la plataforma |
-| POST | `/api/saas/mp-plataforma/probar` | Verifica la conexión |
-| POST | `/api/saas/mp-plataforma/desvincular` | Borra las credenciales |
+| POST | `/api/saas/mp-plataforma/configurar` | Saves platform credentials |
+| POST | `/api/saas/mp-plataforma/probar` | Verifies connection |
+| POST | `/api/saas/mp-plataforma/desvincular` | Deletes credentials |
 
-## Sistema
+## System
 
-| Método | Endpoint | Descripción |
+| Method | Endpoint | Description |
 |---|---|---|
-| GET | `/health` | Estado del servicio (lo usa Railway) |
-| GET | `/api/diagnostico` | Conteo de usuarios/comunidades y tipo de base |
-| GET | `/` | Información básica y enlaces |
+| GET | `/health` | Service status (used by Railway) |
+| GET | `/api/diagnostico` | User/community count and database type |
+| GET | `/` | Basic info and links |
 
 ---
 
-## Códigos de respuesta
+## Response codes
 
-- `200/201` — éxito.
-- `400` — datos inválidos (ej. monto ≤ 0, contraseña corta).
-- `401` — sin token o credenciales incorrectas.
-- `403` — rol sin permisos para la acción.
-- `404` — recurso no encontrado.
-- `409` — conflicto (ej. plan en uso, email duplicado).
-- `502` — Mercado Pago rechazó la operación (se incluye el detalle).
+- `200/201` — success.
+- `400` — invalid data (e.g., amount ≤ 0, short password).
+- `401` — no token or incorrect credentials.
+- `403` — role without permissions for action.
+- `404` — resource not found.
+- `409` — conflict (e.g., plan in use, duplicate email).
+- `502` — Mercado Pago rejected operation (details included).
