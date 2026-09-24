@@ -1,5 +1,5 @@
 {
-  "name": "React TypeScript Vite DevContainer",
+  "name": "Fullstack React/Python DevContainer",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
@@ -12,7 +12,13 @@
         "bradlc.vscode-tailwindcss",
         "dsznajder.es7-react-js-snippets",
         "christian-kohler.path-intellisense",
-        "ms-vscode.vscode-typescript-next"
+        "ms-vscode.vscode-typescript-next",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml",
+        "littlefoxteam.vscode-python-test-adapter"
       ],
       "settings": {
         "editor.formatOnSave": true,
@@ -21,20 +27,35 @@
         "typescript.enablePromptUseWorkspaceTsdk": true,
         "files.exclude": {
           "**/node_modules": false
-        }
+        },
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["backend/tests", "-v"],
+        "python.linting.enabled": true,
+        "python.linting.ruffEnabled": true
       }
     }
   },
-  "forwardPorts": [5173],
+  "forwardPorts": [5173, 8000],
   "portsAttributes": {
     "5173": {
       "label": "Vite Dev Server",
       "onAutoForward": "notify"
+    },
+    "8000": {
+      "label": "FastAPI Backend",
+      "onAutoForward": "notify"
     }
   },
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "npm install && pip install -r backend/requirements.txt",
   "remoteUser": "node",
   "features": {
-    "ghcr.io/devcontainers/features/git:1": {}
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  "containerEnv": {
+    "PYTHONPATH": "/workspace/backend"
   }
 }
