@@ -9,9 +9,18 @@ Esta actualización incluye mejoras críticas de seguridad y nuevas funcionalida
 ## 🔐 Mejoras de Seguridad (CRÍTICAS)
 
 ### 1. Eliminación de Credenciales Hardcodeadas
-- **Archivo**: `backend/.env.example`
-- **Cambio**: Eliminar cualquier credencial de ejemplo del código
-- **Acción requerida**: Configurar variables de entorno en Railway
+- **Archivos**: `backend/config.py`, `backend/.env.example`
+- **Cambio**: ✅ **REALIZADO** — la `SECRET_KEY` (clave que firma los JWT) ya no
+  tiene un valor por defecto hardcodeado en el código.
+  Ahora es una variable **obligatoria** que se obtiene exclusivamente de las
+  variables de entorno / secretos:
+  - Local: `backend/.env` → `SECRET_KEY=...`
+  - Producción (Railway): Service → Variables (definida como secreto)
+  Si falta, el backend falla al arrancar con un mensaje claro (`RuntimeError`)
+  en lugar de firmar tokens con una clave conocida públicamente.
+- **Acción requerida**: antes del próximo deploy, asegurarse de que `SECRET_KEY`
+  esté definida en Railway (generarla con
+  `python -c "import secrets; print(secrets.token_urlsafe(64))"`).
 
 ### 2. Validación de Firmas en Webhooks
 - **Archivo**: `backend/routers/mp.py`
