@@ -20,7 +20,15 @@ class Settings(BaseSettings):
     # firmar los JWT con una clave conocida y pública.
     secret_key: str
     jwt_algorithm: str = "HS256"
-    access_token_minutes: int = 60 * 12  # 12 horas
+    # Access token de vida CORTA (15 min): si un token se filtra, la ventana de
+    # abuso es mínima. La sesión se mantiene con un refresh token OPACO de
+    # larga vida (se envía solo a /api/auth/refresh; nunca autoriza endpoints
+    # de datos). El refresh vive en la tabla `refresh_tokens` solo como hash
+    # SHA-256 → es REVOCABLE (logout, cambio de contraseña, cuenta desactivada)
+    # y se ROTA en cada renovación. No necesita firma propia: al ser opaco,
+    # su validez se comprueba en la base, no criptográficamente.
+    access_token_minutes: int = 15
+    refresh_token_days: int = 7
 
     @field_validator("secret_key")
     @classmethod

@@ -11,6 +11,7 @@ export const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.rep
 export const apiMode = Boolean(API_URL);
 
 const TOKEN_KEY = "comunapp_token";
+const REFRESH_KEY = "comunapp_refresh";
 
 export function guardarToken(token: string | null) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
@@ -18,6 +19,15 @@ export function guardarToken(token: string | null) {
 }
 export function leerToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
+}
+
+/* ── refresh token (sesión de larga vida, revocable por el servidor) ── */
+export function guardarRefreshToken(token: string | null) {
+  if (token) localStorage.setItem(REFRESH_KEY, token);
+  else localStorage.removeItem(REFRESH_KEY);
+}
+export function leerRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_KEY);
 }
 
 export class ApiError extends Error {
@@ -33,13 +43,68 @@ export class ApiError extends Error {
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = leerToken();
+/** Payload que devuelve el backend en login y refresh. */
+export interface SesionTokens {
+  token: string; refreshToken?: string;
+  usuarioId: string; rol: import("./store").Rol;
+  comunidadId: string | null; unidad: string | null;
+}
+
+/** Persistencia de una sesión renovada: callback registrado por store.ts para
+ *  actualizar la sesión guardada (localStorage) cuando el auto-refresh rota
+ *  también el refresh token. */
+let _alRenovar: ((s: SesionTokens) => void) | null = null;
+export function setRenovadorSesion(cb: ((s: SesionTokens) => void) | null) {
+  _alRenovar = cb;
+}
+
+/** Renovación serializada: si varias peticiones reciben 401 a la vez, todas
+ *  esperan la misma promesa de refresh (evita rotar el refresh token
+ *  múltiples veces en paralelo y quedarnos con un token revocado). */
+let _renovando: Promise<boolean> | null = null;
+
+async function renovarSesion(): Promise<boolean> {
+  if (!_renovando) {
+    _renovando = (async () => {
+      const rt = leerRefreshToken();
+      if (!rt) return false;
+      try {
+        const res = await fetch(API_URL + "/api/auth/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refreshToken: rt }),
+        });
+        if (!res.ok) {
+          // Refresh inválido/expirado/revocado: la sesión murió, limpiar todo.
+          guardarRefreshToken(null);
+          guardarToken(null);
+          return false;
+        }
+        const s = (await res.json()) as SesionTokens;
+        guardarToken(s.token);
+        if (s.refreshToken) {
+          guardarRefreshToken(s.refreshToken);
+          _alRenovar?.(s);
+        }
+        return true;
+      } catch {
+        // Sin respuesta del servidor: NO limpiar credenciales (puede ser un
+        // corte transitorio o Railway durmiendo); el próximo 401 reintentará.
+        return false;
+      }
+    })().finally(() => { _renovando = null; });
+  }
+  return _renovando;
+}
+
+async function http<T>(path: string, init: RequestInit = {}, esReintentoTrasRefresh = false): Promise<T> {
   // Reintentos: el plan gratuito de Railway duerme el servicio tras inactividad;
   // el primer intento lo despierta, los siguientes ya lo encuentran arriba.
   let ultimoError: unknown = null;
   for (let intento = 0; intento < 3; intento++) {
     if (intento > 0) await espera(700 * intento);
+    // Leer el token EN CADA intento: tras un refresh puede haber cambiado.
+    const token = leerToken();
     try {
       const res = await fetch(API_URL + path, {
         ...init,
@@ -49,6 +114,11 @@ async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
           ...(init.headers ?? {}),
         },
       });
+      if (res.status === 401 && !esReintentoTrasRefresh) {
+        // Access token expirado (15 min): renovar en silencio y repetir la
+        // petición una sola vez. Si el refresh falla, propagar el 401.
+        if (await renovarSesion()) return http<T>(path, init, true);
+      }
       if (!res.ok) {
         let mensaje = "Error del servidor (" + res.status + ")";
         try {
@@ -85,10 +155,29 @@ const del = <T>(path: string) => http<T>(path, { method: "DELETE" });
 export const me = () => get<import("./store").Usuario>("/api/me");
 
 export async function login(email: string, password: string): Promise<Sesion> {
-  const r = await post<{ token: string; usuarioId: string; rol: Sesion["rol"]; comunidadId: string | null; unidad: string | null }>(
+  const r = await post<SesionTokens>(
     "/api/auth/login", { email, password });
   guardarToken(r.token);
-  return { token: r.token, usuarioId: r.usuarioId, rol: r.rol, comunidadId: r.comunidadId, unidad: r.unidad };
+  guardarRefreshToken(r.refreshToken ?? null);
+  return { token: r.token, refreshToken: r.refreshToken, usuarioId: r.usuarioId, rol: r.rol, comunidadId: r.comunidadId, unidad: r.unidad };
+}
+
+/** Cierra la sesión en el servidor (revoca el refresh token). Best-effort:
+ *  usa fetch directo para no reintentar ni auto-renovar si falla, y siempre
+ *  limpia las credenciales locales aunque el backend esté caído. */
+export async function logout(): Promise<void> {
+  const rt = leerRefreshToken();
+  if (rt && API_URL) {
+    try {
+      await fetch(API_URL + "/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: rt }),
+      });
+    } catch { /* sin red: igualmente limpiamos abajo */ }
+  }
+  guardarToken(null);
+  guardarRefreshToken(null);
 }
 
 /* ─────────────── datos de comunidad ─────────────── */

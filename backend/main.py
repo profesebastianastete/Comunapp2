@@ -8,11 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from database import Base, SessionLocal, engine, sincronizar_esquema
+from rate_limit import cachear_body_middleware, registrar_rate_limit
 from routers import api, mp
 
 # Versión del backend. Se expone en /api/diagnostico para confirmar en
 # producción qué código está corriendo (aumenta al hacer cambios).
-BACKEND_VERSION = "2.2-cors-whitelist"
+BACKEND_VERSION = "2.3-seguridad-ratelimit-refresh"
 
 s = get_settings()
 
@@ -122,6 +123,12 @@ else:
 
 app.include_router(api.router)
 app.include_router(mp.router)  # Mercado Pago: credenciales, cobros y webhook
+
+# ── Rate limiting (slowapi): protección contra fuerza bruta / abuso ──
+# El middleware de caché del body debe ir ANTES que SlowAPIMiddleware para que
+# el key_fn de login pueda leer el email intentado (límite IP + cuenta).
+registrar_rate_limit(app)
+app.middleware("http")(cachear_body_middleware)
 
 
 @app.get("/health", tags=["sistema"])
