@@ -1,5 +1,6 @@
 """Configuración central de la API. Lee variables de entorno (Railway las inyecta)."""
 from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,12 +15,14 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 60 * 12  # 12 horas
 
-    # CORS: orígenes permitidos, separados por coma.
-    # "*" (default seguro) = cualquier *.up.railway.app + http://localhost:puerto,
-    # que cubre Railway y desarrollo local sin configurar nada.
-    # Para restringir, lista orígenes exactos:
-    #   CORS_ORIGINS=https://comunapp.up.railway.app
-    cors_origins: str = "*"
+    # CORS: orígenes aceptados, separados por coma. Se configura mediante la
+    # variable de entorno / secreto CORS_ORIGINS (Railway: Service → Variables).
+    #   CORS_ORIGINS=https://comunapp.up.railway.app,https://admin.ejemplo.cl
+    # Vacío (default) = modo restringido: solo *.up.railway.app y localhost
+    #   (cubre Railway + desarrollo local sin configurar nada).
+    # "*" = permite CUALQUIER origen. No usar en producción: deja sin efecto
+    #   la protección CORS (solo útil para desarrollo/debugging).
+    cors_origins: str = ""
 
     # Mercado Pago (opcional, para cobros reales)
     mp_access_token: str = ""  # token de la PLATAFORMA (recibe webhooks si las comunidades no tienen propio)
@@ -40,7 +43,10 @@ class Settings(BaseSettings):
 
     @property
     def cors_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        # Normaliza: recorta espacios y la barra final. No se convierte a
+        # minúsculas porque CORSMiddleware compara el header Origin de forma
+        # exacta (los hostnames ya llegan en minúsculas de los navegadores).
+        return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
 
 
 @lru_cache
