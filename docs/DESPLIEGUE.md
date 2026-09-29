@@ -20,6 +20,25 @@ Asegúrate de tener en el repo:
 - `railway.toml` en la raíz (configura el frontend).
 - `backend/railway.toml` (configura el backend).
 - Un `.gitignore` que **no** excluya `backend/`.
+- Un `.gitignore` que **sí** excluya `dist/` (carpeta de build del frontend).
+  `dist/` se genera en el deploy con `npm run build`; **nunca debe estar
+  comiteada**. Commitear solo parte de `dist/` (por ejemplo `index.html` sin
+  los bundles `/assets/index-XXXX.js`) provoca en producción el error:
+  *"La carga del módulo … fue bloqueada debido a un tipo MIME ('text/html')
+  no permitido"*.
+
+Verificación rápida antes de hacer push (debe imprimir `0`):
+
+```bash
+git ls-files dist | wc -l
+```
+
+Si imprime un número mayor que 0, sácala del índice de Git (sin borrarla del
+disco local):
+
+```bash
+git rm -r --cached dist
+```
 
 Haz push a GitHub (puedes usar `exportar-a-github.sh` / `.bat`).
 
@@ -67,6 +86,20 @@ Haz push a GitHub (puedes usar `exportar-a-github.sh` / `.bat`).
 
 4. Railway usará el `railway.toml` de la raíz (Node 22 + `npm install` + `npm run build` + servidor estático). Despliega.
 
+> **Sobre `dist/`:** no se comitea en Git. El pipeline del deploy es:
+> Nixpacks → `npm install` → `npm run build` (genera `dist/` en el contenedor)
+> → `node server.mjs`. Así `index.html` y sus bundles con hash siempre
+> provienen del mismo build y nunca quedan desincronizados.
+> Defensas ya integradas:
+> - `server.mjs` falla al arrancar con un mensaje claro si `dist/index.html`
+>   no existe (build ausente), en vez de servir errores confusos.
+> - Las rutas SPA sin extensión sirven `index.html`; **cualquier asset
+>   inexistente (`/assets/*.js`, `*.css`) devuelve 404 real**, nunca HTML
+>   (eso era lo que producía el bloqueo por MIME).
+> - El Service Worker (`sw.js`, caché `comunapp-v2`) usa Network First y
+>   jamás cachea una respuesta HTML bajo la URL de un `.js`/`.css`, para que
+>   una respuesta envenenada no sobreviva entre deploys.
+
 ---
 
 ## 4) Obtener las URLs públicas
@@ -97,6 +130,7 @@ https://comunapp-comunap.up.railway.app
 | `EBUSY: rmdir node_modules/.cache` en el build | Railway monta un volumen de caché en `node_modules/.cache` que no se puede borrar | Ya resuelto en `railway.toml` (`rm -rf node_modules/*` + `npm install`). Si persiste, desactiva **Build Cache** una vez (Settings → Builds) |
 | Warnings `EBADENGINE` (Tailwind exige Node ≥ 20) | Railway compilaba con Node 18 | Fijado con `NIXPACKS_NODE_VERSION = "22"` en `railway.toml` |
 | "Esta instalación necesita su API" al abrir el frontend | `VITE_API_URL` no está definida o el build es anterior a definirla | Define la variable y haz **Redeploy** del frontend |
+| "La carga del módulo … fue bloqueada debido a un tipo MIME ('text/html') no permitido" + "Falló la carga para el módulo" (en `https://…/assets/index-XXXX.js`) | El `dist/` comiteado estaba incompleto/desincronizado: `index.html` pedía un bundle `.js` que no existía en el repo, y el servidor respondía `index.html` (text/html) para esa URL. Además el Service Worker cache-first podía dejar el error pegado | Ya resuelto de raíz: `dist/` se eliminó del repo y lo genera `npm run build` en cada deploy (`railway.toml`), `server.mjs` devuelve 404 (no HTML) para assets inexistentes, y `sw.js` pasó a Network First con caché `comunapp-v2`. Si reaparece: 1) verifica `git ls-files dist` = 0, 2) **Redeploy** del frontend, 3) pide a los usuarios afectados Ctrl+Shift+R (la caché v2 se purga sola al activar el nuevo SW) |
 | "No se pudo conectar con el servidor" | El backend duerme (plan gratuito) o CORS | Espera unos segundos y reintenta (la app reintenta sola). El código ya acepta `*.up.railway.app` por defecto; si persiste tras el push, revisa que no tengas un `CORS_ORIGINS` restrictivo mal escrito en el backend |
 | "Contraseña no reconocida" | Base con hashes antiguos o datos corruptos | En **Shell** del backend: `python3 seed.py --reset-passwords` |
 | El webhook de Mercado Pago no concilia | `BASE_URL` no apunta al backend público | Define `BASE_URL` con la URL pública del backend y redespliega |

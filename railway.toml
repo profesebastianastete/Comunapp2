@@ -1,5 +1,15 @@
 # Configuración de Railway para el FRONTEND (servicio en la raíz del repo).
 # El backend vive en backend/ y se crea como OTRO servicio con root "backend".
+#
+# ── IMPORTANTE sobre dist/ ──
+# dist/ NO está comiteada en el repo (ver .gitignore). La genera este
+# buildCommand (`npm run build`) dentro del contenedor en cada despliegue,
+# de modo que index.html y los bundles hashed (/assets/index-XXXX.js) siempre
+# pertenecen al mismo build.
+# Motivo: se había comiteado un dist/ PARCIAL (index.html sin sus bundles),
+# el servidor respondía index.html (text/html) a /assets/*.js y el navegador
+# bloqueaba el módulo: "tipo MIME ('text/html') no permitido".
+# Si ese error reaparece, basta con un Redeploy (el build regenera todo).
 
 [build]
 builder = "NIXPACKS"
