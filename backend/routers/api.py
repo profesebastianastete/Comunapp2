@@ -9,21 +9,64 @@ import random
 from datetime import date, datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form
+from fastapi.routing import APIRoute
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 import mail
 import serializers as sz
-from auth import (comunidad_del_token, crear_token, es_hash_legado, get_usuario_db,
-                  hash_password, require_roles, usuario_actual, verify_password)
+from auth import (comunidad_del_token, crear_token, emitir_refresh, es_hash_legado,
+                  get_usuario_db, hash_password, renovar_sesion, require_roles,
+                  revocar_sesion, revocar_sesiones_usuario, usuario_actual, verify_password)
 from database import get_db
 from models import (Aviso, Cobro, Comunidad, ConfigPlataforma, DocumentoComunidad, Factura, MiembroComunidad,
                     Movimiento, Pago, Plan, RegistroAcceso, Reserva, Suscripcion, Usuario,
                     Votacion, Voto)
+from rate_limit import (ESCRITURA_LIMIT, limit_auth, limit_escritura, limit_login,
+                           limiter, marcado)
+
+# ── Rate limiting por defecto en TODAS las operaciones de escritura ──────
+# Estrategia: 60 req/min por usuario (bucket = sub del JWT; cae a IP si no hay
+# token válido). Se aplica SOLO a POST/PUT/PATCH/DELETE: las lecturas (GET)
+# quedan libres para no castigar a comunidades enteras que comparten una IP
+# (edificios tras NAT) al cargar sus datos. Los endpoints de auth definen su
+# propio límite más estricto (5-10/min) con @limit_login/@limit_auth; slowapi
+# aplica el EXPLÍCITO y omite el default en esos casos.
+async def _cota_escritura(request: Request):
+    """Dependencia: aplica ESCRITURA_LIMIT (60/min) al bucket del usuario/IP.
+
+    Usada como `dependencies=[Depends(_cota_escritura)]` en las rutas de
+    escritura. A diferencia de envolver el handler, este enfoque no altera la
+    firma de la función original (la inyección de parámetros sigue intacta) y
+    slowapi resuelve el `request` desde `app.state.limiter`.
+    """
+    await limiter.limit(ESCRITURA_LIMIT)(request)
+
+
+def _aplicar_limit_escritura(route: APIRoute) -> None:
+    """Registra la cota de escritura en un endpoint POST/PUT/PATCH/DELETE.
+
+    Corre en import-time (sincronización segura: no depende de requests). Las
+    rutas que ya traen un límite explícito por decorator (@limit_login /
+    @limit_auth en login, refresh, logout, confirmar-email, cambiar-password)
+    se saltan: su cota estricta (5-10/min) ya cubre el abuso y no tiene
+    sentido superponerle la genérica.
+    """
+    metodos = {m.upper() for m in (route.methods or set())}
+    if not metodos & {"POST", "PUT", "PATCH", "DELETE"}:
+        return
+    if getattr(route.endpoint, "_has_explicit_limit", False):
+        return
+    try:
+        route.dependencies.append(Depends(_cota_escritura))
+    except Exception as exc:  # noqa: BLE001 — nunca romper el arranque de la API
+        print(f"[rate-limit] No se pudo aplicar límite a {route.path}: {exc!r}")
+
 
 router = APIRouter(prefix="/api")
+
 
 RESIDENTES = ("PROPIETARIO", "ARRENDATARIO")
 GESTION = ("ADMIN", "COMITE")
@@ -82,8 +125,21 @@ from seed import CUENTAS_DEMO as _CUENTAS  # noqa: E402
 _CLAVE_OFICIAL = {email.strip().lower(): clave for email, _n, clave, _r in _CUENTAS}
 
 
+class RefreshIn(BaseModel):
+    refreshToken: str = ""
+
+
 @router.post("/auth/login")
-def login(body: LoginIn, db: Session = Depends(get_db)):
+@limit_login
+@marcado
+def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
+    """Login con rate limiting (5/min por IP + correo intentado).
+
+    El 401 genérico se mantiene para no permitir enumeración de usuarios
+    ("no existe" y "contraseña incorrecta" responden idéntico).
+    Devuelve además un refresh token opaco (7 días) para renovar el access
+    token de 15 minutos sin volver a pedir credenciales.
+    """
     correo = body.email.strip().lower()
     u = db.execute(select(Usuario).where(func.lower(Usuario.email) == correo)).scalar_one_or_none()
 
@@ -117,9 +173,36 @@ def login(body: LoginIn, db: Session = Depends(get_db)):
         m = u.membresias[0]
         rol, cid, unidad = m.rol, m.comunidad_id, m.unidad
     token = crear_token(u.id, rol, cid, unidad)
+    refresh = emitir_refresh(db, u.id, rol, cid, unidad)
     return {
-        "token": token, "usuarioId": u.id, "rol": rol, "comunidadId": cid, "unidad": unidad,
+        "token": token, "refreshToken": refresh,
+        "usuarioId": u.id, "rol": rol, "comunidadId": cid, "unidad": unidad,
     }
+
+
+@router.post("/auth/refresh")
+@limit_auth
+@marcado
+def refresh(body: RefreshIn, request: Request, db: Session = Depends(get_db)):
+    """Renueva el access token usando el refresh token (rota el refresh).
+
+    Rate limited (10/min por IP+identificador) para impedir el abuso del
+    endpoint como generador masivo de tokens.
+    """
+    return renovar_sesion(db, body.refreshToken)
+
+
+class LogoutIn(BaseModel):
+    refreshToken: str = ""
+
+
+@router.post("/auth/logout")
+@limit_auth
+@marcado
+def logout(body: LogoutIn, request: Request, db: Session = Depends(get_db)):
+    """Cierra la sesión: revoca el refresh token en la BD (idempotente)."""
+    revocar_sesion(db, body.refreshToken)
+    return {"ok": True}
 
 
 class ConfirmarEmailIn(BaseModel):
@@ -127,8 +210,14 @@ class ConfirmarEmailIn(BaseModel):
 
 
 @router.post("/auth/confirmar-email")
-def confirmar_email(body: ConfirmarEmailIn, db: Session = Depends(get_db)):
-    """Activa la cuenta cuando el vecino confirma su correo con el token recibido."""
+@limit_auth
+@marcado
+def confirmar_email(body: ConfirmarEmailIn, request: Request, db: Session = Depends(get_db)):
+    """Activa la cuenta cuando el vecino confirma su correo con el token recibido.
+
+    Rate limited: sin límite, este endpoint permitiría barrer el espacio de
+    tokens de confirmación (enumeración/ataque en línea sobre cuentas ajenas).
+    """
     u = db.execute(select(Usuario).where(Usuario.token_confirmacion == body.token)).scalar_one_or_none()
     if not u:
         raise HTTPException(400, "El enlace de confirmación no es válido o ya fue usado.")
@@ -152,7 +241,10 @@ class CambiarPasswordIn(BaseModel):
 
 
 @router.post("/auth/cambiar-password")
-def cambiar_password(body: CambiarPasswordIn, payload: dict = Depends(usuario_actual),
+@limit_escritura
+@marcado
+def cambiar_password(body: CambiarPasswordIn, request: Request,
+                     payload: dict = Depends(usuario_actual),
                      db: Session = Depends(get_db)):
     """Cualquier rol puede cambiar su propia contraseña (confirmando la actual)."""
     u = db.get(Usuario, payload["sub"])
@@ -163,6 +255,9 @@ def cambiar_password(body: CambiarPasswordIn, payload: dict = Depends(usuario_ac
     if len(body.nueva) < 6:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "La nueva contraseña debe tener al menos 6 caracteres.")
     u.password_hash = hash_password(body.nueva)
+    # Cambio de contraseña → se revocan TODAS las sesiones (refresh tokens)
+    # del usuario. Los access token residuales mueren solos en ≤15 minutos.
+    revocar_sesiones_usuario(db, u.id)
     db.commit()
     return {"ok": True}
 
@@ -831,6 +926,9 @@ def set_password_saas(uid: str, body: SetPasswordIn, db: Session = Depends(get_d
     if len(body.nueva) < 6:
         raise HTTPException(400, "La contraseña debe tener al menos 6 caracteres.")
     u.password_hash = hash_password(body.nueva)
+    # La redefinición invalida las sesiones activas del usuario (revoca los
+    # refresh tokens; el access token residual muere en ≤15 minutos).
+    revocar_sesiones_usuario(db, u.id)
     db.commit()
     return {"ok": True}
 
@@ -841,6 +939,9 @@ def toggle_activo_saas(uid: str, db: Session = Depends(get_db)):
     if not u:
         raise HTTPException(404, "Usuario no encontrado.")
     u.activo = not u.activo
+    if not u.activo:
+        # Cuenta desactivada → fuera todas las sesiones (refresh tokens).
+        revocar_sesiones_usuario(db, u.id)
     db.commit()
     return {"activo": u.activo}
 
@@ -1022,6 +1123,8 @@ def restablecer_password(uid: str, db: Session = Depends(get_db)):
     u.password_hash = hash_password(nueva)
     u.password_temporal = nueva
     u.activo = True
+    # Al rotar la contraseña se revocan las sesiones previas del usuario.
+    revocar_sesiones_usuario(db, u.id)
     db.commit()
     mail.correo_credenciales(u.email, u.nombre, nueva)
     return {"ok": True, "password_temporal": nueva}
@@ -1058,3 +1161,12 @@ def planes_publicos(db: Session = Depends(get_db)):
     """Lista de planes activos para mostrar precios en la landing (sin autenticación)."""
     planes = db.execute(select(Plan).where(Plan.activa == True)).scalars().all()  # noqa: E712
     return {"planes": [sz.plan(p) for p in planes]}
+
+
+# Aplica el límite de escritura default a todos los POST/PUT/PATCH/DELETE del
+# router (los login/refresh/logout/confirmar-email ya traen su límite explícito
+# por decorator y slowapi respeta ese scope "handler" sobre el "default").
+for _ruta in router.routes:
+    if isinstance(_ruta, APIRoute):
+        _aplicar_limit_escritura(_ruta)
+del _ruta

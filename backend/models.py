@@ -235,3 +235,24 @@ class ConfigPlataforma(Base):
     public_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(160), nullable=True)
     fecha: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class RefreshToken(Base):
+    """Refresh tokens con estado en BD: habilitan REVOCACIÓN real de sesiones.
+
+    El access token (JWT sin estado, 15 min) no se puede revocar; la sesión
+    sobrevive gracias a este registro, que se invalida al cerrar sesión, al
+    cambiar la contraseña o al desactivar la cuenta. Se guarda solo el hash
+    SHA-256 del token: una filtración de la tabla no expone tokens utilizables.
+    """
+    __tablename__ = "refresh_tokens"
+    id: Mapped[str] = mapped_column(String(16), primary_key=True, default=uid)
+    usuario_id: Mapped[str] = mapped_column(ForeignKey("usuarios.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Datos de la sesión activa (comunidad/unidad elegidas al hacer login)
+    rol: Mapped[str] = mapped_column(String(20), default="")
+    comunidad_id: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    unidad: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    creado: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expira: Mapped[datetime] = mapped_column(DateTime)
+    revocado: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -173,6 +173,9 @@ export interface FilaCSV {
 export interface Sesion {
   token: string; usuarioId: string; rol: Rol;
   comunidadId: string | null; unidad: string | null;
+  /** Refresh token opaco (7 días, revocable). El access token dura 15 min y
+   *  api.ts lo renueva en silencio usando este valor. */
+  refreshToken?: string;
 }
 
 /* ── comisiones de Mercado Pago ───────────────────────────────
@@ -239,13 +242,30 @@ export function setSesion(s: Sesion | null) {
   if (s) localStorage.setItem(SK, JSON.stringify(s));
   else localStorage.removeItem(SK);
 }
-/** Cierra la sesión y limpia toda la caché local (token, usuario, comunidades). */
+/** Cierra la sesión y limpia toda la caché local (token, usuario, comunidades).
+ *  Best-effort: avisa al servidor para revocar el refresh token, pero limpia
+ *  el estado local aunque la petición falle o no haya red. */
 export function logout() {
+  void api.logout();
   setSesion(null);
-  api.guardarToken(null);
   localStorage.removeItem(UK);
   localStorage.removeItem(CK);
 }
+
+/* Cuando api.ts renueva la sesión en silencio (access token de 15 min
+   expirado), el refresh token rota: persistimos ambos en la sesión guardada
+   para que tras un F5 sigamos usando el refresh vigente (los anteriores
+   quedan revocados en el servidor). */
+api.setRenovadorSesion((s) => {
+  const actual = getSesion();
+  if (!actual || actual.usuarioId !== s.usuarioId) return;
+  setSesion({
+    ...actual,
+    token: s.token,
+    refreshToken: s.refreshToken ?? actual.refreshToken,
+    rol: s.rol, comunidadId: s.comunidadId, unidad: s.unidad,
+  });
+});
 
 /* ── lecturas síncronas (desde la caché llenada por el servidor) ── */
 export function usuarioActual(s: Sesion): Usuario | null {
