@@ -70,7 +70,7 @@ npm run dev
 Guía paso a paso en **[docs/DESPLIEGUE.md](docs/DESPLIEGUE.md)**. Resumen:
 
 1. **Servicio backend:** carpeta `backend/`, agregar plugin PostgreSQL y definir `SECRET_KEY`, `CORS_ORIGINS`, `BASE_URL`, `FRONTEND_URL`.
-2. **Servicio frontend:** raíz del repo, definir `VITE_API_URL` con la URL pública del backend.
+2. **Servicio frontend:** raíz del repo, definir `VITE_API_URL` con la URL pública del backend. `dist/` **no** se comitea: la genera `npm run build` en cada deploy (así `index.html` y sus bundles nunca quedan desincronizados).
 3. El bootstrap siembra los datos automáticamente en el primer arranque.
 
 ## Credenciales de demostración
