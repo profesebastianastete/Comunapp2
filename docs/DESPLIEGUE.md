@@ -60,7 +60,7 @@ Haz push a GitHub (puedes usar `exportar-a-github.sh` / `.bat`).
 | Variable | Valor |
 |---|---|
 | `DATABASE_URL` | *referencia a PostgreSQL* |
-| `SECRET_KEY` | una cadena larga y aleatoria (ej. 64 caracteres) |
+| `SECRET_KEY` | **obligatoria como secreto**: cadena larga y aleatoria (ej. 64 caracteres). Ya no hay valor por defecto en el código: si falta, el backend no arranca. Generá una con `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
 | `BASE_URL` | la URL pública del **backend** (para el webhook de Mercado Pago) |
 | `FRONTEND_URL` | la URL pública del **frontend** |
 | `CORS_ORIGINS` | *(opcional)* por defecto acepta cualquier `*.up.railway.app` y `localhost`. Define orígenes exactos (ej. `https://comunapp.up.railway.app`) solo si quieres restringir |

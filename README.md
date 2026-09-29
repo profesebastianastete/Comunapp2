@@ -53,10 +53,17 @@ ComunApp es una plataforma SaaS para administrar comunidades de vecinos, parcela
 cd backend
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env                                  # y poné SECRET_KEY (obligatoria)
 python3 seed.py                # siembra datos demo (idempotente)
 python3 -m uvicorn main:app --port 8000
 ```
 Sin `DATABASE_URL` usa SQLite (`comunapp.db`). API en `http://127.0.0.1:8000/docs`.
+
+> **`SECRET_KEY`** (clave de firma de los JWT) se lee **solo** de variables de
+> entorno / secretos — local: `backend/.env`; producción: Railway → Service →
+> Variables (como secreto). No hay valor por defecto hardcodeado: sin ella el
+> backend no arranca. Generá una con
+> `python -c "import secrets; print(secrets.token_urlsafe(64))"`.
 
 **Frontend** (necesita Node 20+):
 ```bash

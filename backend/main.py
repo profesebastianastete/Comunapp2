@@ -12,7 +12,7 @@ from routers import api, mp
 
 # Versión del backend. Se expone en /api/diagnostico para confirmar en
 # producción qué código está corriendo (aumenta al hacer cambios).
-BACKEND_VERSION = "2.1-cors"
+BACKEND_VERSION = "2.2-cors-whitelist"
 
 s = get_settings()
 
@@ -83,17 +83,42 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# CORS incondicional: acepta CUALQUIER origen. Es seguro aquí porque la
-# autenticación usa Bearer tokens (no cookies), así que no hay credenciales que
-# proteger con CORS. Se ignora a propósito la variable CORS_ORIGINS para que una
-# configuración antigua no vuelva a bloquear el despliegue.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS controlado por la variable de entorno / secreto CORS_ORIGINS
+# (Railway: Service → Variables). Opciones:
+#   - Lista de orígenes exactos separados por coma → solo esos dominios.
+#   - Vacío (default) → modo restringido: *.up.railway.app + localhost.
+#   - "*" → cualquier origen (permisivo; solo desarrollo/debugging).
+# La autenticación usa Bearer tokens (no cookies), por eso allow_credentials=False.
+if "*" in s.cors_list:
+    # Permisivo explícito (solo si alguien configura CORS_ORIGINS=* a propósito).
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+elif not s.cors_list:
+    # Default seguro: cualquier despliegue en Railway (*.up.railway.app) y
+    # desarrollo local (http://localhost:puerto). Nada de orígenes arbitrarios.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"https://[\w.-]+\.up\.railway\.app|http://(localhost|127\.0\.0\.1)(:\d+)?",
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Whitelist estricta definida en CORS_ORIGINS (comparación exacta de
+    # esquema + host + puerto). Cambiar el secreto y redeployar actualiza los
+    # dominios aceptados sin tocar código.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=s.cors_list,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(api.router)
 app.include_router(mp.router)  # Mercado Pago: credenciales, cobros y webhook
